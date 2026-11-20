@@ -111,11 +111,11 @@
     </section>
     <section id="asr" hidden>
       <h2>语音识别 ASR</h2>
-      <p>设备端语音启用后，可填写自建 SenseVoice 的服务地址。豆包流式适配尚待接入。</p>
+      <p>设备端语音启用后，可选择豆包语音或自建 SenseVoice。</p>
     </section>
     <section id="asr-doubao" hidden>
       <h2>豆包语音识别</h2>
-      <p>在火山引擎开通流式语音识别，按所选接口的鉴权说明创建凭证，并记录使用的资源 ID。<a href="https://www.volcengine.com/docs/6561/1354869">流式语音识别文档</a></p>
+      <p>在火山引擎开通豆包流式语音识别 2.0。在豆包语音控制台「API Key 管理」创建密钥，回到喜悦选择「豆包语音（云端）」，填写密钥并选与开通方式对应的资源 ID。默认是小时版 <code>volc.seedasr.sauc.duration</code>。喜悦在用户说完后提交当前语音片段。<a href="https://docs.volcengine.com/docs/doubao-voice/unidirectional-streaming-automatic-speech-recognition-websocket?lang=zh">一句话识别接口文档</a></p>
     </section>
     <section id="asr-sensevoice" hidden>
       <h2>自建 SenseVoice</h2>
@@ -131,10 +131,11 @@
       <p>如果你已经在用 Codex，可以把指定工作区里的查询交给它处理。先在 Codex 所在机器运行喜悦连接器。</p>
       <ol>
         <li>按安装文档启动连接器，绑定工作区并配置访问凭证。</li>
-        <li>在喜悦的「系统配置 → 高级接入」选择「仅使用外部 Agent」。</li>
+        <li>在喜悦的「系统配置 → 高级接入」可选「仅使用外部 Agent」或「大模型 + 外部 Agent」。</li>
         <li>填入以 <code>/v1/chat</code> 结尾的完整地址及连接器凭证。跨设备使用时填 HTTPS 地址。</li>
         <li>保存后，发送一条文字验证，例如请 Codex 概括这个工作区的用途。长任务可在「任务与待办」里提交、查看结果或请求取消。</li>
       </ol>
+      <p>组合模式下，普通问答由大模型处理。需要委托时可说「交给外部助手，概括这个工作区的用途」。</p>
       <p><a href="https://github.com/jinuljt/xiyue-connector">打开连接器安装文档</a></p>
     </section>
   </main>

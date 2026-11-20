@@ -202,17 +202,22 @@ window.addEventListener('hashchange', () => page(location.hash.slice(1)));
 const serviceNames = {asr:'语音识别 ASR',llm:'大模型 LLM',tts:'语音合成 TTS',external:'外部 Agent'};
 function formatDuration(seconds) {return seconds < 60 ? `${seconds} 秒` : `${Math.floor(seconds/60)} 分 ${seconds%60} 秒`;}
 function setupStep(config) {
+  const llmReady = config.llm.endpoint && config.llm.model;
+  const externalReady = config.external.endpoint;
+  const modeReady = config.mode === 'external' ? externalReady :
+    llmReady && (config.mode !== 'hybrid' || externalReady);
   if (serverStatus?.voice?.available) {
     if (config.device_setup_complete) return null;
-    if (config.asr.provider !== 'sensevoice' || !config.asr.endpoint) return 'configure_asr';
-    if ((config.mode === 'direct' && config.llm.model && config.llm.endpoint) ||
-        (config.mode === 'external' && config.external.endpoint)) return 'verify_device';
+    const asrReady = config.asr.provider === 'doubao'
+      ? config.asr.key_configured && !config.asr.endpoint
+      : config.asr.provider === 'sensevoice' && config.asr.endpoint;
+    if (!asrReady) return 'configure_asr';
+    if (modeReady) return 'verify_device';
     return 'configure';
   }
   if (config.setup_complete) return null;
-  if (config.mode === 'external' && config.external.endpoint) return 'verify';
-  if (config.mode === 'direct' && config.updated_at && config.llm.endpoint && config.llm.model &&
-      (config.llm.key_configured || config.llm.provider.startsWith('custom'))) return 'verify';
+  if (modeReady && (config.mode === 'external' || (config.updated_at &&
+      (config.llm.key_configured || config.llm.provider.startsWith('custom'))))) return 'verify';
   return 'configure';
 }
 function renderManagement() {
@@ -260,6 +265,18 @@ function renderUsage(records) {
   $('usage-history').replaceChildren(table);
 }
 function inputLabel(title,input) {const label=el('label',title);label.append(input);return label;}
+function updateASRFields() {
+  const active = Boolean(serverStatus?.voice?.available);
+  const cloud = $('asr-provider').value === 'doubao';
+  $('asr-endpoint-field').hidden = cloud;
+  $('asr-endpoint').disabled = !active || cloud;
+  $('asr-resource-field').hidden = !cloud;
+  $('asr-resource').disabled = !active || !cloud;
+  $('asr-key-title').textContent = cloud ? '豆包语音 API Key' : '访问凭证（可选）';
+  $('asr-cloud-note').hidden = !active || !cloud;
+  $('asr-guide').href = '/help.html#' + (active ? (cloud ? 'asr-doubao' : 'asr-sensevoice') : 'asr');
+}
+$('asr-provider').addEventListener('change', updateASRFields);
 function fillSettings(config) {
   settingsRevision=config.revision;
   savedSettings=config;
@@ -269,8 +286,16 @@ function fillSettings(config) {
   $('tts-system-summary').textContent = nativeVoice
     ? '语音链路使用音箱系统语音，无需额外密钥。'
     : '音箱系统语音是默认方案，无需配置。播报在设备端语音启用后开放。';
-  $('asr-endpoint').disabled = !nativeVoice;
+  $('asr-provider').value = config.asr.provider === 'sensevoice' ? 'sensevoice' : 'doubao';
   $('asr-endpoint').value = config.asr.provider === 'sensevoice' ? config.asr.endpoint : '';
+  const cloudPreset = providerOptions.asr.find(item => item.id === 'doubao');
+  $('asr-resource').replaceChildren(...(cloudPreset?.models || []).map(id => new Option(id, id)));
+  const resourceID = config.asr.provider === 'doubao' ? config.asr.model : '';
+  if (resourceID && ![...$('asr-resource').options].some(option => option.value === resourceID)) {
+    $('asr-resource').append(new Option(resourceID, resourceID));
+  }
+  $('asr-resource').value = resourceID || cloudPreset?.model || '';
+  updateASRFields();
   $('asr-key').value = '';
   $('asr-clear').checked = false;
   $('asr-clear-label').hidden = !config.asr.key_configured;
@@ -392,12 +417,12 @@ $('setup-action').addEventListener('click', () => {
   if (step === 'verify') openPreview();
   else {
     location.hash = 'system';
-    if (step === 'configure_asr') setTimeout(() => $('asr-endpoint').focus(), 0);
+    if (step === 'configure_asr') setTimeout(() => $('asr-provider').focus(), 0);
   }
 });
 function openPreview() {
   if(settingsDirty){toast('请先保存当前配置，再进行验证');return;}
-  if(state.settings?.mode === 'hybrid'){toast('混合模式暂未开放，请先选择可用模式');return;}
+  $('preview-hybrid').hidden = state.settings?.mode !== 'hybrid';
   $('preview-form').querySelector('.form-error').textContent='';$('preview-result').textContent='';$('preview-dialog').showModal();
 }
 $('open-preview').addEventListener('click',openPreview);
@@ -412,9 +437,11 @@ $('settings-form').addEventListener('submit',async event=>{
       const {provider, endpoint, model} = savedSettings[name];
       payload[name] = {provider, endpoint, model};
     }
-    if (serverStatus?.voice?.available && ($('asr-endpoint').value || savedSettings.asr.provider === 'sensevoice')) {
-      payload.asr = {provider: 'sensevoice', endpoint: $('asr-endpoint').value,
-        model: savedSettings.asr.provider === 'sensevoice' ? savedSettings.asr.model || 'sensevoice' : 'sensevoice',
+    if (serverStatus?.voice?.available) {
+      const provider = $('asr-provider').value;
+      payload.asr = {provider, endpoint: provider === 'sensevoice' ? $('asr-endpoint').value : '',
+        model: provider === 'doubao' ? $('asr-resource').value :
+          (savedSettings.asr.provider === 'sensevoice' && savedSettings.asr.model) || 'sensevoice',
         api_key: $('asr-key').value, clear_key: $('asr-clear').checked};
     }
     for(const name of ['llm', 'external'])payload[name]={provider:$(`${name}-provider`).value,endpoint:$(`${name}-endpoint`).value,model:$(`${name}-model`).value,api_key:$(`${name}-key`).value,clear_key:$(`${name}-clear`).checked};
