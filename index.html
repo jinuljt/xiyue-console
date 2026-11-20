@@ -59,6 +59,13 @@
       <section class="settings-panel">
         <h2>语音合成 TTS</h2>
         <p id="tts-system-summary">音箱系统语音是默认方案，无需配置。</p>
+        <div id="device-tts-fields" class="field-grid" hidden>
+          <label>语音合成服务<select id="tts-provider"><option value="system">音箱系统语音（推荐）</option><option value="doubao">豆包语音合成</option></select></label>
+          <label id="tts-voice-field">豆包音色 ID<input id="tts-voice" maxlength="200"></label>
+          <label id="tts-key-field">豆包语音 API Key<input type="password" id="tts-key" autocomplete="new-password" maxlength="8192"><small id="tts-key-configured"></small></label>
+          <label id="tts-clear-label" class="check-label" hidden><input type="checkbox" id="tts-clear">清除已保存的播报凭证</label>
+        </div>
+        <p id="tts-cloud-note" hidden>使用豆包播报时，回复和提醒的文字会发送给豆包语音合成。</p>
         <a href="/help.html#tts">查看语音合成指南</a>
       </section>
       <details id="advanced-settings" class="settings-panel">
@@ -83,7 +90,7 @@
       <h2>语音链路</h2><p id="voice-state"></p><p id="voice-timing" class="muted"></p>
     </section>
     <div class="stats overview-stats"><article><span>服务请求</span><strong id="usage-requests">0</strong><small>最近 500 条真实调用记录</small></article><article><span>输入 / 输出 Token</span><strong class="text-stat" id="usage-tokens">—</strong><small id="usage-token-note">尚无服务商返回的用量</small></article><article><span>费用与账户额度</span><strong class="text-stat">未接入账单</strong><small>自配服务请以服务商账单为准</small></article></div>
-    <div class="two-column"><div class="system-card"><h2>运行状态</h2><dl><dt>服务运行时间</dt><dd id="status-uptime">—</dd><dt>程序堆内存</dt><dd id="status-memory">—</dd></dl></div><div class="system-card"><h2>用量说明</h2><p class="muted">只记录服务、模型、时间、耗时、调用结果及服务商返回的 Token 数，不保存对话原文和密钥。</p><p class="muted">没有返回 Token 的调用显示“未提供”，不会估算成零。ASR 音频时长、TTS 字数、托管套餐及余额将在相应服务接入后统计。</p><button id="open-preview" class="secondary">发起一次文字验证</button></div></div>
+    <div class="two-column"><div class="system-card"><h2>运行状态</h2><dl><dt>服务运行时间</dt><dd id="status-uptime">—</dd><dt>程序堆内存</dt><dd id="status-memory">—</dd></dl><dl id="service-status"></dl></div><div class="system-card"><h2>用量说明</h2><p class="muted">只记录服务、模型、时间、耗时、调用结果及服务商返回的 Token 数，不保存对话原文和密钥。</p><p class="muted">没有返回 Token 的调用显示“未提供”，不会估算成零。ASR 音频时长、TTS 字数、托管套餐及余额将在相应服务接入后统计。</p><button id="open-preview" class="secondary">发起一次文字验证</button></div></div>
     <div class="section-heading"><h2>最近调用</h2><span class="muted">不含对话内容</span></div><div id="usage-history" class="usage-history"></div>
   </section>
   <footer>喜悦 · 把生活的小事，认真接住。</footer>

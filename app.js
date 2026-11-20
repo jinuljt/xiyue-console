@@ -212,6 +212,7 @@ function setupStep(config) {
       ? config.asr.key_configured && !config.asr.endpoint
       : config.asr.provider === 'sensevoice' && config.asr.endpoint;
     if (!asrReady) return 'configure_asr';
+    if (config.tts.provider === 'doubao' && (!serverStatus.voice.cloud_tts_available || !config.tts.key_configured || !config.tts.model)) return 'configure_tts';
     if (modeReady) return 'verify_device';
     return 'configure';
   }
@@ -228,6 +229,9 @@ function renderManagement() {
   $('runtime-uptime').textContent = `已运行 ${formatDuration(serverStatus.uptime_seconds)}`;
   $('status-uptime').textContent = formatDuration(serverStatus.uptime_seconds);
   $('status-memory').textContent = `${(serverStatus.memory_bytes / 1024 / 1024).toFixed(1)} MiB（非进程总内存 / 整机内存）`;
+  const runtimeLabel = {disabled:'设备语音未启用', not_configured:'待配置', configured:'已配置，等待验证', succeeded:'最近验证成功', failed:'最近验证失败'};
+  $('service-status').replaceChildren(...Object.entries(serverStatus.services || {}).flatMap(([name, value]) =>
+    [el('dt', serviceNames[name] || name), el('dd', runtimeLabel[value.state] || '—')]));
   const voice = serverStatus.voice;
   $('voice-monitor').hidden = !voice?.available;
   if (voice?.available) {
@@ -244,12 +248,13 @@ function renderManagement() {
   const instructions = {
     verify: '已保存配置。发送一条文字，确认' + service + '能正常回复。',
     verify_device: '对音箱喊「' + config.wake_word + '」并说一句话。成功播报后引导会收起。',
-    configure_asr: '先填写 SenseVoice 服务地址，再用音箱完成首次语音验证。',
+    configure_asr: '选择豆包语音或自建 SenseVoice，再用音箱完成首次语音验证。',
+    configure_tts: '补全语音合成配置，或选用音箱系统语音。',
     configure: '选择大模型厂商，填写模型 ID 和 API Key，然后保存。'
   };
   $('setup-next').textContent = instructions[step] || '';
   $('setup-action').hidden = step === 'verify_device';
-  $('setup-action').textContent = {verify:'验证服务',configure_asr:'配置语音识别',configure:'配置大模型'}[step] || '';
+  $('setup-action').textContent = {verify:'验证服务',configure_asr:'配置语音识别',configure_tts:'配置语音合成',configure:'配置大模型'}[step] || '';
   if (!settingsDirty && settingsRevision !== config.revision) fillSettings(config);
   const usageSignature=JSON.stringify(serverStatus.usage || []);
   if (usageSignature !== lastUsage) {lastUsage=usageSignature; renderUsage(serverStatus.usage || []);}
@@ -277,15 +282,34 @@ function updateASRFields() {
   $('asr-guide').href = '/help.html#' + (active ? (cloud ? 'asr-doubao' : 'asr-sensevoice') : 'asr');
 }
 $('asr-provider').addEventListener('change', updateASRFields);
+function updateTTSFields() {
+  const cloud = $('tts-provider').value === 'doubao';
+  $('tts-voice-field').hidden = !cloud;
+  $('tts-key-field').hidden = !cloud;
+  $('tts-cloud-note').hidden = !cloud;
+  $('tts-clear-label').hidden = !savedSettings.tts.key_configured;
+  if (cloud && !$('tts-voice').value) $('tts-voice').value = providerOptions.tts.find(item => item.id === 'doubao')?.model || '';
+}
+$('tts-provider').addEventListener('change', updateTTSFields);
 function fillSettings(config) {
   settingsRevision=config.revision;
   savedSettings=config;
   const nativeVoice = Boolean(serverStatus?.voice?.available);
   $('device-asr-fields').hidden = !nativeVoice;
   $('asr-unavailable').hidden = nativeVoice;
-  $('tts-system-summary').textContent = nativeVoice
-    ? '语音链路使用音箱系统语音，无需额外密钥。'
-    : '音箱系统语音是默认方案，无需配置。播报在设备端语音启用后开放。';
+  $('tts-system-summary').textContent = '音箱系统语音是默认方案，无需配置。';
+  $('device-tts-fields').hidden = !nativeVoice;
+  $('tts-provider').value = config.tts.provider === 'doubao' ? 'doubao' : 'system';
+  $('tts-provider').querySelector('option[value="doubao"]').disabled = !serverStatus?.voice?.cloud_tts_available;
+  $('tts-voice').value = config.tts.provider === 'doubao' ? config.tts.model : '';
+  $('tts-key').value = '';
+  $('tts-clear').checked = false;
+  $('tts-key-configured').textContent = config.tts.key_configured ? '已保存，留空则保留。' : '';
+  updateTTSFields();
+  if (config.tts.provider === 'doubao' && !serverStatus?.voice?.cloud_tts_available) {
+    $('tts-system-summary').textContent = '当前设备没有可用的 PCM 播放器。请选用音箱系统语音。';
+  }
+  $('tts-cloud-note').hidden = !nativeVoice || $('tts-provider').value !== 'doubao';
   $('asr-provider').value = config.asr.provider === 'sensevoice' ? 'sensevoice' : 'doubao';
   $('asr-endpoint').value = config.asr.provider === 'sensevoice' ? config.asr.endpoint : '';
   const cloudPreset = providerOptions.asr.find(item => item.id === 'doubao');
@@ -418,6 +442,7 @@ $('setup-action').addEventListener('click', () => {
   else {
     location.hash = 'system';
     if (step === 'configure_asr') setTimeout(() => $('asr-provider').focus(), 0);
+    if (step === 'configure_tts') setTimeout(() => $('tts-provider').focus(), 0);
   }
 });
 function openPreview() {
@@ -443,6 +468,9 @@ $('settings-form').addEventListener('submit',async event=>{
         model: provider === 'doubao' ? $('asr-resource').value :
           (savedSettings.asr.provider === 'sensevoice' && savedSettings.asr.model) || 'sensevoice',
         api_key: $('asr-key').value, clear_key: $('asr-clear').checked};
+      const cloudTTS = $('tts-provider').value === 'doubao';
+      payload.tts = {provider: $('tts-provider').value, endpoint: '', model: cloudTTS ? $('tts-voice').value : '',
+        api_key: cloudTTS ? $('tts-key').value : '', clear_key: $('tts-clear').checked};
     }
     for(const name of ['llm', 'external'])payload[name]={provider:$(`${name}-provider`).value,endpoint:$(`${name}-endpoint`).value,model:$(`${name}-model`).value,api_key:$(`${name}-key`).value,clear_key:$(`${name}-clear`).checked};
     const config=await api('/api/settings','PUT',payload);settingsDirty=false;fillSettings(config);await refresh();toast('配置已保存');
