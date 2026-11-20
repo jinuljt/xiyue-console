@@ -99,7 +99,7 @@ function renderEvents() {
     const delivery = {
       pending:'待播报', playing:'正在播报', delivered:'已播报', failed:'播报失败',
       interrupted:'播报被中断', expired:'提醒已过期', skipped:'任务已暂停或取消',
-      queue_full:'播报队列已满', unavailable:'系统语音未启用'
+      queue_full:'播报队列已满', unavailable:'播报服务未就绪'
     }[event.delivery];
     if (delivery) box.append(el('small', delivery, 'muted'));
     return box;
