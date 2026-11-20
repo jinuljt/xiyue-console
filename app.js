@@ -7,7 +7,7 @@ let lastSnapshot = '';
 let providerOptions = null;
 let settingsDirty = false;
 let settingsRevision = 0;
-let lastConfig = '';
+let savedSettings;
 let lastUsage = '';
 let serverStatus = null;
 const titles = {
@@ -175,14 +175,12 @@ window.addEventListener('hashchange', () => page(location.hash.slice(1)));
 
 const serviceNames = {asr:'语音识别 ASR',llm:'大模型 LLM',tts:'语音合成 TTS',external:'外部 Agent'};
 function formatDuration(seconds) {return seconds < 60 ? `${seconds} 秒` : `${Math.floor(seconds/60)} 分 ${seconds%60} 秒`;}
-function readiness(name, config) {
-  if (name === 'tts' && config.provider === 'system') return ['使用系统语音','无需额外密钥'];
-  if (!config.endpoint) return ['待配置','尚未填写服务地址'];
-  if (name === 'llm' && !config.model) return ['待配置','尚未填写模型名称'];
-  const recent = [...(serverStatus?.usage || [])].reverse().find(u => u.service === name && u.config_revision === state.settings.revision);
-  if (recent) return recent.success ? ['文字验证通过','文字接口已验证'] : ['调用失败',`错误：${recent.error_code}`];
-  if (name === 'llm' && !config.key_configured) return ['未配置密钥','本地免密服务可直接进行文字验证'];
-  return ['已保存，待验证',['asr','tts'].includes(name) ? '配置已保存，运行适配尚未接入' : '可通过文字验证检查服务'];
+function setupStep(config) {
+  if (config.setup_complete) return null;
+  if (config.mode === 'external' && config.external.endpoint) return 'verify';
+  if (config.mode === 'direct' && config.updated_at && config.llm.endpoint && config.llm.model &&
+      (config.llm.key_configured || config.llm.provider.startsWith('custom'))) return 'verify';
+  return 'configure';
 }
 function renderManagement() {
   const config = state.settings; if (!config) return;
@@ -192,19 +190,13 @@ function renderManagement() {
   $('runtime-uptime').textContent = `已运行 ${formatDuration(serverStatus.uptime_seconds)}`;
   $('status-uptime').textContent = formatDuration(serverStatus.uptime_seconds);
   $('status-memory').textContent = `${(serverStatus.memory_bytes / 1024 / 1024).toFixed(1)} MiB（非进程总内存 / 整机内存）`;
-  const signature = JSON.stringify([config, serverStatus.usage]);
-  if (signature !== lastConfig) {
-    lastConfig = signature;
-    $('service-overview').replaceChildren(...Object.entries(serviceNames).map(([name,label]) => {
-      const value = config[name]; const option = providerOptions[name].find(p => p.id === value.provider); const [status,note] = readiness(name,value);
-      const card = el('article', undefined, 'service-card'); const top = el('div', undefined, 'card-top');
-      top.append(el('h3',label),el('span',status,'badge '+(status.includes('失败') ? 'error' : 'waiting')));
-      card.append(top,el('p',option?.name || value.provider,'service-provider'),el('p',name === 'llm' ? value.model || '尚未选择模型' : note,'muted'));
-      card.append(button('配置',() => {location.hash='system'; setTimeout(() => $(`settings-${name}`)?.scrollIntoView({behavior:'smooth',block:'start'}),0);},'text-button'));
-      return card;
-    }));
-
-  }
+  const step = setupStep(config);
+  $('first-setup').hidden = !step;
+  const service = config.mode === 'external' ? '外部助手' : '大模型';
+  $('setup-next').textContent = step === 'verify'
+    ? `已保存配置。发送一条文字，确认${service}能正常回复。`
+    : '选择大模型厂商，填写模型 ID 和 API Key，然后保存。';
+  $('setup-action').textContent = step === 'verify' ? '验证服务' : '配置大模型';
   if (!settingsDirty && settingsRevision !== config.revision) fillSettings(config);
   const usageSignature=JSON.stringify(serverStatus.usage || []);
   if (usageSignature !== lastUsage) {lastUsage=usageSignature; renderUsage(serverStatus.usage || []);}
@@ -222,31 +214,114 @@ function renderUsage(records) {
 function inputLabel(title,input) {const label=el('label',title);label.append(input);return label;}
 function fillSettings(config) {
   settingsRevision=config.revision;
+  savedSettings=config;
   $('setting-name').value=config.name; $('setting-wake').value=config.wake_word; $('setting-timezone').value=config.timezone; $('setting-mode').value=config.mode;
   $('settings-save-state').textContent=config.updated_at ? `已保存 · ${when(config.updated_at)}` : '默认配置尚未保存';
-  $('service-settings').replaceChildren(...Object.entries(serviceNames).map(([name,title])=>{
-    const current=config[name];const panel=el('section',undefined,'settings-panel');panel.id=`settings-${name}`;
-    const heading=el('div',undefined,'panel-heading');heading.append(el('h2',title));panel.append(heading);
-    const grid=el('div',undefined,'field-grid');
-    const provider=el('select');provider.id=`${name}-provider`;
-    for (const option of providerOptions[name]) {const opt=el('option',option.name);opt.value=option.id;provider.append(opt);} provider.value=current.provider;
-    const endpoint=el('input');endpoint.id=`${name}-endpoint`;endpoint.value=current.endpoint;endpoint.type='url';endpoint.maxLength=2000;endpoint.placeholder=name==='external'?'完整 Agent 调用 URL':'https://服务地址/版本前缀';
-    const model=el('input');model.id=`${name}-model`;model.value=current.model;model.maxLength=200;model.placeholder=name==='tts'?'音色 ID（外部语音）':'按服务商控制台填写';
-    const key=el('input');key.id=`${name}-key`;key.type='password';key.autocomplete='new-password';key.maxLength=8192;key.placeholder=current.key_configured?'已配置，留空保留原密钥':'填写服务 API Key（可选）';
-    const keyLabel=inputLabel('服务密钥',key);keyLabel.append(el('small',current.key_configured?'密钥已保存，不会回显。':'密钥独立加密保存，不进入普通配置和日志。','muted'));
-    const clear=el('input');clear.type='checkbox';clear.id=`${name}-clear`;const clearLabel=inputLabel('清除已保存的密钥',clear);clearLabel.className='check-label';clearLabel.hidden=!current.key_configured;
-    const modelLabel=inputLabel(name==='tts'?'音色 / 模型':name==='asr'?'模型 / 资源 ID':'模型名称',model);modelLabel.hidden=name==='external';
-    const endpointLabel=inputLabel(name==='external'?'调用地址':'服务地址（Base URL）',endpoint);grid.append(inputLabel('服务商',provider),endpointLabel,modelLabel,keyLabel);
-    const note=el('p',undefined,'muted');note.id=`${name}-note`;
-    const update=()=>{const selected=providerOptions[name].find(p=>p.id===provider.value);note.textContent=selected?.note || '';const system=name==='tts' && provider.value==='system';endpoint.disabled=system;model.disabled=system;key.disabled=system;endpointLabel.hidden=system;modelLabel.hidden=system||name==='external';keyLabel.hidden=system;};
-    provider.addEventListener('change',()=>{const selected=providerOptions[name].find(p=>p.id===provider.value);endpoint.value=selected?.endpoint || '';model.value=selected?.model || '';update();});
-    update();panel.append(grid,clearLabel,note);
-    if(name==='llm'||name==='external')panel.append(button('验证已保存的配置',openPreview,'secondary'));
-    return panel;
-  }));
+  if (config.mode !== 'direct') $('advanced-settings').open = true;
+  for (const name of ['llm', 'external']) {
+    const current = config[name];
+    const isModel = name === 'llm';
+    const panel = el('section', undefined, isModel ? 'settings-panel' : '');
+    panel.id = `settings-${name}`;
+    if (isModel) panel.append(el('h2', '大模型 LLM'));
+    const grid = el('div', undefined, 'field-grid');
+
+    const provider = el('select');
+    provider.id = `${name}-provider`;
+    for (const option of providerOptions[name]) {
+      const opt = el('option', option.name);
+      opt.value = option.id;
+      provider.append(opt);
+    }
+    provider.value = current.provider;
+
+    const endpoint = el('input');
+    endpoint.id = `${name}-endpoint`;
+    endpoint.type = 'url';
+    endpoint.value = current.endpoint;
+    endpoint.maxLength = 2000;
+    endpoint.placeholder = isModel ? 'https://服务地址/版本前缀' : 'https://连接器地址/v1/chat';
+
+    const model = el('input');
+    model.id = `${name}-model`;
+    model.value = current.model;
+    model.maxLength = 200;
+    model.placeholder = '选择预设或输入服务商提供的模型 ID';
+    const models = el('datalist');
+    models.id = 'llm-models';
+    model.setAttribute('list', models.id);
+    model.autocomplete = 'off';
+
+    const key = el('input');
+    key.id = `${name}-key`;
+    key.type = 'password';
+    key.autocomplete = 'new-password';
+    key.maxLength = 8192;
+    key.placeholder = current.key_configured ? '已保存，留空保留' : '';
+    const clear = el('input');
+    clear.type = 'checkbox';
+    clear.id = `${name}-clear`;
+    const clearLabel = inputLabel('清除已保存的密钥', clear);
+    clearLabel.className = 'check-label';
+    clearLabel.hidden = !current.key_configured;
+
+    const note = el('p', undefined, 'muted');
+    const help = el('a', '查看配置指南', 'text-button');
+    function update() {
+      const selected = providerOptions[name].find(option => option.id === provider.value);
+      if (isModel) {
+        models.replaceChildren(...(selected?.models || []).map(value => {
+          const option = el('option');
+          option.value = value;
+          return option;
+        }));
+        help.href = `/help.html#${selected?.id || 'llm'}`;
+        note.textContent = selected?.note || '';
+      }
+    }
+    provider.addEventListener('change', () => {
+      const selected = providerOptions[name].find(option => option.id === provider.value);
+      endpoint.value = selected?.endpoint || '';
+      model.value = selected?.model || '';
+      key.value = '';
+      update();
+    });
+    if (isModel) {
+      grid.append(inputLabel('大模型厂商', provider), inputLabel('模型 ID', model), models);
+    } else {
+      provider.hidden = true;
+      model.hidden = true;
+      grid.append(provider, model);
+    }
+    grid.append(inputLabel(isModel ? '服务地址（Base URL）' : '连接器调用地址', endpoint),
+      inputLabel(isModel ? 'API Key' : '连接器凭证', key));
+    const verify = button('发送文字验证', openPreview, 'secondary');
+    verify.dataset.verifyMode = isModel ? 'direct' : 'external';
+    panel.append(grid, clearLabel);
+    if (isModel) panel.append(note, help);
+    panel.append(verify);
+    $(isModel ? 'model-settings' : 'external-settings').replaceChildren(panel);
+    update();
+  }
+  updateModeActions();
 }
+function updateModeActions() {
+  const mode = $('setting-mode').value;
+  document.querySelectorAll('[data-verify-mode]').forEach(control => {
+    control.hidden = mode !== control.dataset.verifyMode;
+  });
+  const external = $('external-settings');
+  external.hidden = mode === 'direct';
+  $('external-endpoint').disabled = external.hidden;
+}
+$('setting-mode').addEventListener('change', updateModeActions);
+$('setup-action').addEventListener('click', () => {
+  if (setupStep(state.settings) === 'verify') openPreview();
+  else location.hash = 'system';
+});
 function openPreview() {
   if(settingsDirty){toast('请先保存当前配置，再进行验证');return;}
+  if(state.settings?.mode === 'hybrid'){toast('混合模式暂未开放，请先选择可用模式');return;}
   $('preview-form').querySelector('.form-error').textContent='';$('preview-result').textContent='';$('preview-dialog').showModal();
 }
 $('open-preview').addEventListener('click',openPreview);
@@ -257,8 +332,12 @@ $('settings-form').addEventListener('submit',async event=>{
   event.preventDefault();const b=event.currentTarget.querySelector('[type=submit]');b.disabled=true;$('settings-error').textContent='';
   try{
     const payload={revision:settingsRevision,name:$('setting-name').value,wake_word:$('setting-wake').value,timezone:$('setting-timezone').value,mode:$('setting-mode').value};
-    for(const name of Object.keys(serviceNames))payload[name]={provider:$(`${name}-provider`).value,endpoint:$(`${name}-endpoint`).value,model:$(`${name}-model`).value,api_key:$(`${name}-key`).value,clear_key:$(`${name}-clear`).checked};
-    const config=await api('/api/settings','PUT',payload);settingsDirty=false;fillSettings(config);await refresh();toast('系统配置已保存；尚未验证的服务不会显示为已连接');
+    for (const name of ['asr', 'tts']) {
+      const {provider, endpoint, model} = savedSettings[name];
+      payload[name] = {provider, endpoint, model};
+    }
+    for(const name of ['llm', 'external'])payload[name]={provider:$(`${name}-provider`).value,endpoint:$(`${name}-endpoint`).value,model:$(`${name}-model`).value,api_key:$(`${name}-key`).value,clear_key:$(`${name}-clear`).checked};
+    const config=await api('/api/settings','PUT',payload);settingsDirty=false;fillSettings(config);await refresh();toast('配置已保存');
   }catch(e){$('settings-error').textContent=e.message;}finally{b.disabled=false;}
 });
 $('preview-form').addEventListener('submit',async event=>{
