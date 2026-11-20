@@ -247,10 +247,17 @@ function fillSettings(config) {
     model.value = current.model;
     model.maxLength = 200;
     model.placeholder = '选择预设或输入服务商提供的模型 ID';
-    const models = el('datalist');
-    models.id = 'llm-models';
-    model.setAttribute('list', models.id);
-    model.autocomplete = 'off';
+    const preset = el('select');
+    preset.id = 'llm-model-preset';
+    const presetLabel = inputLabel('模型预设', preset);
+    function selectMatchingPreset() {
+      preset.value = [...preset.options].some(option => option.value === model.value) ? model.value : '';
+    }
+    preset.addEventListener('change', () => {
+      if (preset.value) model.value = preset.value;
+      else model.focus();
+    });
+    model.addEventListener('input', selectMatchingPreset);
 
     const key = el('input');
     key.id = `${name}-key`;
@@ -270,11 +277,16 @@ function fillSettings(config) {
     function update() {
       const selected = providerOptions[name].find(option => option.id === provider.value);
       if (isModel) {
-        models.replaceChildren(...(selected?.models || []).map(value => {
-          const option = el('option');
+        const manual = el('option', '请选择预设，或手动填写模型 ID');
+        manual.value = '';
+        const options = selected?.models || [];
+        preset.replaceChildren(manual, ...options.map(value => {
+          const option = el('option', value);
           option.value = value;
           return option;
         }));
+        presetLabel.hidden = !options.length;
+        selectMatchingPreset();
         help.href = `/help.html#${selected?.id || 'llm'}`;
         note.textContent = selected?.note || '';
       }
@@ -287,7 +299,7 @@ function fillSettings(config) {
       update();
     });
     if (isModel) {
-      grid.append(inputLabel('大模型厂商', provider), inputLabel('模型 ID', model), models);
+      grid.append(inputLabel('大模型厂商', provider), presetLabel, inputLabel('模型 ID', model));
     } else {
       provider.hidden = true;
       model.hidden = true;

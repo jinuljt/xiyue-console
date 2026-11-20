@@ -9,3 +9,13 @@
 .help-content a,.settings-panel a{color:var(--green);text-decoration:underline;text-underline-offset:3px}
 #advanced-settings summary{cursor:pointer;font-weight:600}
 #advanced-settings h2{margin-top:20px}
+.wiki-layout{display:grid;grid-template-columns:minmax(220px,260px) minmax(0,1fr);max-width:1140px;min-height:100vh;margin:0 auto}
+.wiki-sidebar{position:sticky;top:0;align-self:start;max-height:100vh;overflow:auto;padding:24px 20px;border-right:1px solid #d8ded9}
+.wiki-sidebar h1{font-size:20px;margin:18px 0}
+.wiki-sidebar nav a,.wiki-sidebar summary{display:block;padding:6px 9px;border-radius:5px;color:inherit}
+.wiki-sidebar summary{display:list-item;cursor:pointer;font-weight:600}
+.wiki-sidebar details a{margin-left:12px}
+.wiki-sidebar a[aria-current="page"]{background:#e4eee8;color:#214b36;font-weight:650}
+.wiki-layout .wiki-content{margin:0;width:100%;max-width:800px;padding:28px clamp(18px,5vw,56px)}
+@media(max-width:640px){.wiki-layout{grid-template-columns:minmax(100px,34%) minmax(0,1fr)}.wiki-sidebar{padding:14px 5px}.wiki-sidebar h1{font-size:15px}.wiki-sidebar nav a,.wiki-sidebar summary{padding:5px 4px;overflow-wrap:anywhere}.wiki-sidebar details a{margin-left:5px}.wiki-layout .wiki-content{padding:16px 12px}}
+.wiki-sidebar nav{display:grid;gap:7px;overflow:visible}

@@ -5,64 +5,139 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>喜悦 · 配置指南</title>
 <link rel="stylesheet" href="/style.css">
+<script src="/help.js" defer></script>
 </head>
 <body>
-<article class="help-content">
-  <a href="/#system">← 返回系统配置</a>
-  <h1>喜悦配置指南</h1>
-  <nav aria-label="指南目录">
-    <a href="#llm">大模型</a>
-    <a href="#asr">语音识别</a>
-    <a href="#tts">语音合成</a>
-    <a href="#external">连接已有助手</a>
-  </nav>
-  <section id="llm">
-    <h2>大模型 LLM</h2>
-    <ol>
-      <li>到对应平台开通模型调用并创建 API Key。</li>
-      <li>在喜悦的「系统配置」选择厂商，检查服务地址，再选一个模型或输入账号可调用的模型 ID。</li>
-      <li>粘贴 API Key，保存配置，点击「发送文字验证」。收到回复后，首次引导会自动隐藏。</li>
-    </ol>
-    <p>如果鉴权失败，检查密钥与所属项目或地区。模型找不到时，从服务商后台复制模型 ID，再确认账号已开通该模型。</p>
-    <dl>
-      <dt id="deepseek">DeepSeek</dt><dd>在开放平台创建密钥，从模型列表复制 ID。<a href="https://api-docs.deepseek.com/">官方接入指南</a></dd>
-      <dt id="doubao">火山方舟（豆包）</dt><dd>在方舟开通模型并创建 API Key。根据账号的调用方式填写模型 ID 或推理接入点 ID。<a href="https://www.volcengine.com/docs/82379/1399008">方舟调用指南</a></dd>
-      <dt id="qwen">阿里云百炼</dt><dd>选择地域和工作空间，创建 API Key。服务地址须与密钥所属地域一致。<a href="https://help.aliyun.com/zh/model-studio/compatibility-of-openai-with-dashscope">百炼兼容接口</a></dd>
-      <dt id="kimi">月之暗面（Kimi）</dt><dd>在 Kimi 开放平台创建密钥，使用模型列表里的 API ID。<a href="https://platform.moonshot.cn/docs/guide/start-using-kimi-api">Kimi API 入门</a></dd>
-      <dt id="glm">智谱（GLM）</dt><dd>创建与所用服务匹配的 API Key。编程套餐请使用套餐专属地址。<a href="https://docs.bigmodel.cn/cn/api/introduction">智谱快速开始</a></dd>
-      <dt id="minimax">MiniMax</dt><dd>在开放平台创建密钥，选择 OpenAI SDK 文档列出的模型。<a href="https://platform.minimax.cn/docs/api-reference/text-openai-api">MiniMax 兼容接口</a></dd>
-      <dt id="hunyuan">腾讯混元（TokenHub）</dt><dd>使用 TokenHub 的 API Key，并在模型广场复制调用名。<a href="https://developer.cloud.tencent.com/article/2787397">TokenHub 接入示例</a></dd>
-      <dt id="openai">OpenAI</dt><dd>在 API 平台创建项目密钥，选择支持 Chat Completions 且项目有权使用的模型。<a href="https://platform.openai.com/docs/models">OpenAI 模型目录</a></dd>
-      <dt id="anthropic">Anthropic（Claude）</dt><dd>在 Claude Console 创建密钥，填写 Messages 接口支持的模型 ID。<a href="https://platform.claude.com/docs/en/api/messages">Claude Messages 文档</a></dd>
-      <dt id="gemini">Google（Gemini）</dt><dd>在 Google AI Studio 创建密钥，使用 Gemini 的 OpenAI 兼容地址。<a href="https://aistudio.google.com/docs/openai">Gemini 兼容接口</a></dd>
-      <dt id="custom">自定义 · OpenAI Chat Completions</dt><dd>填写版本前缀的 Base URL，喜悦会追加 <code>/chat/completions</code>。模型 ID 由你的服务提供。</dd>
-      <dt id="custom_anthropic">自定义 · Anthropic Messages</dt><dd>填写版本前缀的 Base URL，喜悦会追加 <code>/messages</code>。模型 ID 由你的服务提供。</dd>
-    </dl>
-  </section>
-  <section id="asr">
-    <h2>语音识别 ASR</h2>
-    <p>喜悦的语音识别适配尚未开放，准备服务后请等待对应选项上线再填写凭证。</p>
-    <h3>豆包语音</h3>
-    <p>在火山引擎开通流式语音识别，按所选接口的鉴权说明创建凭证，并记录使用的资源 ID。<a href="https://www.volcengine.com/docs/6561/1354869">流式语音识别文档</a></p>
-    <h3>自建 SenseVoice</h3>
-    <p>在常开的机器上按项目文档下载并运行 SenseVoice，先用示例音频确认识别正常。喜悦将为验证过的服务部署方式补充接口地址和认证步骤。<a href="https://github.com/FunAudioLLM/SenseVoice">SenseVoice 官方运行说明</a></p>
-  </section>
-  <section id="tts">
-    <h2>语音合成 TTS</h2>
-    <p>默认使用音箱系统语音，无需额外账号或密钥。音箱端播报接入后可试听。</p>
-    <p>豆包语音合成将在适配完成后开放。届时请在火山引擎开通对应合成服务，按同一个接口版本获取凭证并选择音色。<a href="https://www.volcengine.com/docs/6561">豆包语音文档</a></p>
-  </section>
-  <section id="external">
-    <h2>连接已有助手</h2>
-    <p>如果你已经在用 Codex，可以把指定工作区里的查询交给它处理。先在 Codex 所在机器运行喜悦连接器。</p>
-    <ol>
-      <li>按安装文档启动连接器，绑定工作区并配置访问凭证。</li>
-      <li>在喜悦的「系统配置 → 高级接入」选择「仅使用外部 Agent」。</li>
-      <li>填入以 <code>/v1/chat</code> 结尾的完整地址及连接器凭证。跨设备使用时填 HTTPS 地址。</li>
-      <li>保存后，发送一条文字验证，例如请 Codex 概括这个工作区的用途。</li>
-    </ol>
-    <p><a href="https://github.com/jinuljt/xiyue-connector">打开连接器安装文档</a></p>
-  </section>
-</article>
+<div class="wiki-layout">
+  <aside class="wiki-sidebar">
+    <a href="/#system">← 返回系统配置</a>
+    <h1>喜悦配置指南</h1>
+    <nav aria-label="指南目录" id="help-nav">
+      <details open>
+        <summary>大模型</summary>
+        <a href="#llm">配置大模型</a>
+        <a href="#deepseek">DeepSeek</a>
+        <a href="#doubao">火山方舟</a>
+        <a href="#qwen">阿里云百炼</a>
+        <a href="#kimi">Kimi</a>
+        <a href="#glm">智谱 GLM</a>
+        <a href="#minimax">MiniMax</a>
+        <a href="#hunyuan">腾讯混元</a>
+        <a href="#openai">OpenAI</a>
+        <a href="#anthropic">Anthropic</a>
+        <a href="#gemini">Google Gemini</a>
+        <a href="#custom">自定义 OpenAI 接口</a>
+        <a href="#custom_anthropic">自定义 Anthropic 接口</a>
+      </details>
+      <details open>
+        <summary>语音识别</summary>
+        <a href="#asr">语音识别概览</a>
+        <a href="#asr-doubao">豆包语音</a>
+        <a href="#asr-sensevoice">自建 SenseVoice</a>
+      </details>
+      <a href="#tts">语音合成</a>
+      <a href="#external">连接已有助手</a>
+    </nav>
+  </aside>
+  <main class="help-content wiki-content" id="help-content">
+    <section id="llm">
+      <h2>大模型 LLM</h2>
+      <ol>
+        <li>到对应平台开通模型调用并创建 API Key。</li>
+        <li>在喜悦的「系统配置」选择厂商，检查服务地址，再选一个模型或输入账号可调用的模型 ID。</li>
+        <li>粘贴 API Key，保存配置，点击「发送文字验证」。收到回复后，首次引导会自动隐藏。</li>
+      </ol>
+      <p>如果鉴权失败，检查密钥与所属项目或地区。在「模型预设」可浏览喜悦内置的选项。除此之外，可在「模型 ID」输入厂商提供的 ID。模型找不到时，确认账号或套餐已开通该模型。</p>
+    </section>
+    <section id="deepseek" hidden>
+      <h2>DeepSeek</h2>
+      <p>在开放平台创建密钥，从模型列表复制 ID。<a href="https://api-docs.deepseek.com/">官方接入指南</a></p>
+      <p><a href="#llm">查看通用配置步骤</a></p>
+    </section>
+    <section id="doubao" hidden>
+      <h2>火山方舟（豆包）</h2>
+      <p>在方舟开通模型并创建 API Key。根据账号的调用方式填写模型 ID 或推理接入点 ID。<a href="https://www.volcengine.com/docs/82379/1399008">方舟调用指南</a> · <a href="https://www.volcengine.com/docs/82379/1330310">模型目录</a></p>
+      <p><a href="#llm">查看通用配置步骤</a></p>
+    </section>
+    <section id="qwen" hidden>
+      <h2>阿里云百炼</h2>
+      <p>选择地域和工作空间，创建 API Key。服务地址须与密钥所属地域一致。<a href="https://help.aliyun.com/zh/model-studio/compatibility-of-openai-with-dashscope">百炼兼容接口</a> · <a href="https://help.aliyun.com/zh/model-studio/models">模型目录</a></p>
+      <p><a href="#llm">查看通用配置步骤</a></p>
+    </section>
+    <section id="kimi" hidden>
+      <h2>月之暗面（Kimi）</h2>
+      <p>在 Kimi 开放平台创建密钥，使用模型列表里的 API ID。<a href="https://platform.moonshot.cn/docs/guide/start-using-kimi-api">Kimi API 入门</a> · <a href="https://platform.kimi.com/docs/pricing/chat">模型目录</a></p>
+      <p><a href="#llm">查看通用配置步骤</a></p>
+    </section>
+    <section id="glm" hidden>
+      <h2>智谱（GLM）</h2>
+      <p>创建与所用服务匹配的 API Key。编程套餐请使用套餐专属地址。<a href="https://docs.bigmodel.cn/cn/api/introduction">智谱快速开始</a> · <a href="https://docs.bigmodel.cn/cn/guide/models/vlm/glm-5.3-flash">GLM-5.3 Flash 系列</a></p>
+      <p><a href="#llm">查看通用配置步骤</a></p>
+    </section>
+    <section id="minimax" hidden>
+      <h2>MiniMax</h2>
+      <p>在开放平台创建密钥，选择 OpenAI SDK 文档列出的模型。<a href="https://platform.minimax.cn/docs/api-reference/text-openai-api">MiniMax 兼容接口</a></p>
+      <p><a href="#llm">查看通用配置步骤</a></p>
+    </section>
+    <section id="hunyuan" hidden>
+      <h2>腾讯混元（TokenHub）</h2>
+      <p>使用 TokenHub 的 API Key，并在模型广场复制调用名。<a href="https://cloud.tencent.com/document/product/1823/130051">TokenHub 模型目录</a></p>
+      <p><a href="#llm">查看通用配置步骤</a></p>
+    </section>
+    <section id="openai" hidden>
+      <h2>OpenAI</h2>
+      <p>在 API 平台创建项目密钥，选择支持 Chat Completions 且项目有权使用的模型。<a href="https://platform.openai.com/docs/models">OpenAI 模型目录</a></p>
+      <p><a href="#llm">查看通用配置步骤</a></p>
+    </section>
+    <section id="anthropic" hidden>
+      <h2>Anthropic（Claude）</h2>
+      <p>在 Claude Console 创建密钥，填写 Messages 接口支持的模型 ID。<a href="https://platform.claude.com/docs/en/api/messages">Claude Messages 文档</a> · <a href="https://platform.claude.com/docs/en/models/overview">模型目录</a></p>
+      <p><a href="#llm">查看通用配置步骤</a></p>
+    </section>
+    <section id="gemini" hidden>
+      <h2>Google（Gemini）</h2>
+      <p>在 Google AI Studio 创建密钥，使用 Gemini 的 OpenAI 兼容地址。<a href="https://aistudio.google.com/docs/openai">Gemini 兼容接口</a> · <a href="https://aistudio.google.com/docs/models">模型目录</a></p>
+      <p><a href="#llm">查看通用配置步骤</a></p>
+    </section>
+    <section id="custom" hidden>
+      <h2>自定义 · OpenAI Chat Completions</h2>
+      <p>填写版本前缀的 Base URL，喜悦会追加 <code>/chat/completions</code>。模型 ID 由你的服务提供。</p>
+      <p><a href="#llm">查看通用配置步骤</a></p>
+    </section>
+    <section id="custom_anthropic" hidden>
+      <h2>自定义 · Anthropic Messages</h2>
+      <p>填写版本前缀的 Base URL，喜悦会追加 <code>/messages</code>。模型 ID 由你的服务提供。</p>
+      <p><a href="#llm">查看通用配置步骤</a></p>
+    </section>
+    <section id="asr" hidden>
+      <h2>语音识别 ASR</h2>
+      <p>喜悦的语音识别适配尚未开放，准备服务后请等待对应选项上线再填写凭证。</p>
+    </section>
+    <section id="asr-doubao" hidden>
+      <h2>豆包语音识别</h2>
+      <p>在火山引擎开通流式语音识别，按所选接口的鉴权说明创建凭证，并记录使用的资源 ID。<a href="https://www.volcengine.com/docs/6561/1354869">流式语音识别文档</a></p>
+    </section>
+    <section id="asr-sensevoice" hidden>
+      <h2>自建 SenseVoice</h2>
+      <p>在常开的机器上按项目文档下载并运行 SenseVoice，先用示例音频确认识别正常。喜悦将为验证过的服务部署方式补充接口地址和认证步骤。<a href="https://github.com/FunAudioLLM/SenseVoice">SenseVoice 官方运行说明</a></p>
+    </section>
+    <section id="tts" hidden>
+      <h2>语音合成 TTS</h2>
+      <p>默认使用音箱系统语音，无需额外账号或密钥。音箱端播报接入后可试听。</p>
+      <p>豆包语音合成将在适配完成后开放。届时请在火山引擎开通对应合成服务，按同一个接口版本获取凭证并选择音色。<a href="https://www.volcengine.com/docs/6561">豆包语音文档</a></p>
+    </section>
+    <section id="external" hidden>
+      <h2>连接已有助手</h2>
+      <p>如果你已经在用 Codex，可以把指定工作区里的查询交给它处理。先在 Codex 所在机器运行喜悦连接器。</p>
+      <ol>
+        <li>按安装文档启动连接器，绑定工作区并配置访问凭证。</li>
+        <li>在喜悦的「系统配置 → 高级接入」选择「仅使用外部 Agent」。</li>
+        <li>填入以 <code>/v1/chat</code> 结尾的完整地址及连接器凭证。跨设备使用时填 HTTPS 地址。</li>
+        <li>保存后，发送一条文字验证，例如请 Codex 概括这个工作区的用途。</li>
+      </ol>
+      <p><a href="https://github.com/jinuljt/xiyue-connector">打开连接器安装文档</a></p>
+    </section>
+  </main>
+</div>
 </body>
 </html>
