@@ -34,7 +34,6 @@ function page(name) {
   document.querySelectorAll('[data-page]').forEach(b => b.classList.toggle('selected', b.dataset.page === name));
   $('page-title').textContent = titles[name][0]; $('page-subtitle').textContent = titles[name][1];
   $('new-task').hidden = !['tasks', 'schedules'].includes(name);
-  $('open-settings').hidden = name === 'system';
 }
 function when(iso) {return new Date(iso).toLocaleString('zh-CN', {month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});}
 function active(t) {return !['done', 'cancelled'].includes(t.status);}
@@ -102,7 +101,13 @@ async function refresh() {
     if (snapshot !== lastSnapshot) {state = next; lastSnapshot = snapshot; renderTasks(); renderAbilities(); renderSchedules(); renderEvents();}
     renderManagement(); updateCountdowns();
   }
-  catch { $('connection-error').hidden = false; }
+  catch {
+    $('connection-error').hidden = false;
+    $('runtime-state').textContent = '状态暂不可用';
+    $('runtime-uptime').textContent = '';
+    $('status-uptime').textContent = '—';
+    $('status-memory').textContent = '—';
+  }
   finally {refreshBusy = false;}
 }
 function fieldsFor(ability, container, mode) {
@@ -156,7 +161,6 @@ $('config-form').addEventListener('submit', e => submitForm(e, () => api(`/api/a
 $('task-ability').addEventListener('change', () => fieldsFor(state.abilities[$('task-ability').value], $('task-fields'), 'task'));
 $('task-when').addEventListener('change', updateWhen);
 $('new-task').addEventListener('click', () => openTask());
-$('open-settings').addEventListener('click', () => {location.hash = 'system';});
 $('new-schedule').addEventListener('click', () => openTask('reminder', true));
 $('import-ability').addEventListener('click', () => $('ability-file').click());
 $('ability-file').addEventListener('change', () => handle(async () => {
@@ -172,19 +176,20 @@ window.addEventListener('hashchange', () => page(location.hash.slice(1)));
 const serviceNames = {asr:'语音识别 ASR',llm:'大模型 LLM',tts:'语音合成 TTS',external:'外部 Agent'};
 function formatDuration(seconds) {return seconds < 60 ? `${seconds} 秒` : `${Math.floor(seconds/60)} 分 ${seconds%60} 秒`;}
 function readiness(name, config) {
-  if (name === 'tts' && config.provider === 'system') return ['使用系统语音','连接音箱后启用'];
+  if (name === 'tts' && config.provider === 'system') return ['使用系统语音','无需额外密钥'];
   if (!config.endpoint) return ['待配置','尚未填写服务地址'];
   if (name === 'llm' && !config.model) return ['待配置','尚未填写模型名称'];
   const recent = [...(serverStatus?.usage || [])].reverse().find(u => u.service === name && u.config_revision === state.settings.revision);
-  if (recent) return recent.success ? ['文字验证通过','仅验证文字接口，语音链路尚未连接'] : ['调用失败',`错误：${recent.error_code}`];
+  if (recent) return recent.success ? ['文字验证通过','文字接口已验证'] : ['调用失败',`错误：${recent.error_code}`];
   if (name === 'llm' && !config.key_configured) return ['未配置密钥','本地免密服务可直接进行文字验证'];
   return ['已保存，待验证',['asr','tts'].includes(name) ? '配置已保存，运行适配尚未接入' : '可通过文字验证检查服务'];
 }
 function renderManagement() {
   const config = state.settings; if (!config) return;
+  $('device-name').textContent = config.name;
+  $('runtime-version').textContent = `版本 ${serverStatus.version}`;
   $('runtime-state').textContent = '运行中';
   $('runtime-uptime').textContent = `已运行 ${formatDuration(serverStatus.uptime_seconds)}`;
-  $('status-platform').textContent = `${serverStatus.platform} · 本机开发服务`;
   $('status-uptime').textContent = formatDuration(serverStatus.uptime_seconds);
   $('status-memory').textContent = `${(serverStatus.memory_bytes / 1024 / 1024).toFixed(1)} MiB（非进程总内存 / 整机内存）`;
   const signature = JSON.stringify([config, serverStatus.usage]);
@@ -198,16 +203,7 @@ function renderManagement() {
       card.append(button('配置',() => {location.hash='system'; setTimeout(() => $(`settings-${name}`)?.scrollIntoView({behavior:'smooth',block:'start'}),0);},'text-button'));
       return card;
     }));
-    const llmReady = config.llm.endpoint && config.llm.model && config.llm.key_configured;
-    $('setup-title').textContent = llmReady ? '模型配置已保存，下一步验证服务' : '先完成系统服务配置';
-    $('setup-description').textContent = llmReady ? '保存配置不代表已连接。可以发送一段文字，验证模型回复和用量记录。' : '配置 ASR、大模型与语音合成，也可以连接外部 Agent。';
-    const steps = [
-      [!!config.updated_at,'保存基本设置','设备名称、唤醒词和时区'],
-      [!!llmReady,'配置大模型','服务商、服务地址、模型和密钥'],
-      [!!config.asr.endpoint,'配置语音识别','云端服务或自建 SenseVoice'],
-      [false,'接入音箱语音链路','尚未完成；不会把开发服务当作已连接音箱']
-    ];
-    $('setup-checklist').replaceChildren(...steps.map(([done,title,note]) => {const row=el('div',undefined,'checklist-row'); row.append(el('span',done?'✓':'○',done?'check-done':'muted'),el('strong',title),el('span',note,'muted'));return row;}));
+
   }
   if (!settingsDirty && settingsRevision !== config.revision) fillSettings(config);
   const usageSignature=JSON.stringify(serverStatus.usage || []);
