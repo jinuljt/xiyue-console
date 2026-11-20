@@ -33,6 +33,7 @@ function page(name) {
   document.querySelectorAll('.page').forEach(p => {p.hidden = p.id !== name;});
   document.querySelectorAll('[data-page]').forEach(b => b.classList.toggle('selected', b.dataset.page === name));
   $('page-title').textContent = titles[name][0]; $('page-subtitle').textContent = titles[name][1];
+  if (name === 'tasks' && state.settings) handle(loadExternalTasks);
   $('new-task').hidden = !['tasks', 'schedules'].includes(name);
 }
 function when(iso) {return new Date(iso).toLocaleString('zh-CN', {month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});}
@@ -94,19 +95,37 @@ function renderEvents() {
   const events = [...state.events].reverse().slice(0, 15);
   $('home-events').replaceChildren(...(events.length ? events.map(event => {
     const box = el('div', undefined, 'event'); const time = el('time', when(event.at)); time.dateTime = event.at;
-    box.append(time, el('p', event.text)); return box;
+    box.append(time, el('p', event.text));
+    const delivery = {
+      pending:'待播报', playing:'正在播报', delivered:'已播报', failed:'播报失败',
+      interrupted:'播报被中断', expired:'提醒已过期', skipped:'任务已暂停或取消',
+      queue_full:'播报队列已满', unavailable:'系统语音未启用'
+    }[event.delivery];
+    if (delivery) box.append(el('small', delivery, 'muted'));
+    return box;
   }) : [empty('任务开始后，喜悦的提示会出现在这里。')]));
 }
 function updateCountdowns() {document.querySelectorAll('[data-due]').forEach(e => {const remaining = Math.max(0, Math.ceil((new Date(e.dataset.due) - Date.now()) / 1000)); e.textContent = remaining ? `剩余 ${Math.floor(remaining / 60)} 分 ${remaining % 60} 秒` : '计时到期，正在更新…';});}
 async function refresh() {
   if (refreshBusy) return; refreshBusy = true;
   try {
+    const session = await api('/api/session');
+    const paired = session.authenticated;
+    $('owner-logout').hidden = !session.required || !paired;
+    document.querySelector('body > main').hidden = !paired;
+    document.querySelector('body > aside').hidden = !paired;
+    if (!paired) {
+      if (!$('pair-dialog').open) $('pair-dialog').showModal();
+      return;
+    }
+    if ($('pair-dialog').open) $('pair-dialog').close();
     if (!providerOptions) providerOptions = await api('/api/providers');
     const [next, status] = await Promise.all([api('/api/state'), api('/api/status')]); serverStatus = status; $('connection-error').hidden = true;
     const snapshot = JSON.stringify(next);
     // Preserve button focus and click targets while polling unchanged state.
     if (snapshot !== lastSnapshot) {state = next; lastSnapshot = snapshot; renderTasks(); renderAbilities(); renderSchedules(); renderEvents();}
     renderManagement(); updateCountdowns();
+    if (!$('tasks').hidden && state.settings?.revision !== externalTaskRevision) await loadExternalTasks();
   }
   catch {
     $('connection-error').hidden = false;
@@ -183,6 +202,13 @@ window.addEventListener('hashchange', () => page(location.hash.slice(1)));
 const serviceNames = {asr:'语音识别 ASR',llm:'大模型 LLM',tts:'语音合成 TTS',external:'外部 Agent'};
 function formatDuration(seconds) {return seconds < 60 ? `${seconds} 秒` : `${Math.floor(seconds/60)} 分 ${seconds%60} 秒`;}
 function setupStep(config) {
+  if (serverStatus?.voice?.available) {
+    if (config.device_setup_complete) return null;
+    if (config.asr.provider !== 'sensevoice' || !config.asr.endpoint) return 'configure_asr';
+    if ((config.mode === 'direct' && config.llm.model && config.llm.endpoint) ||
+        (config.mode === 'external' && config.external.endpoint)) return 'verify_device';
+    return 'configure';
+  }
   if (config.setup_complete) return null;
   if (config.mode === 'external' && config.external.endpoint) return 'verify';
   if (config.mode === 'direct' && config.updated_at && config.llm.endpoint && config.llm.model &&
@@ -201,19 +227,24 @@ function renderManagement() {
   $('voice-monitor').hidden = !voice?.available;
   if (voice?.available) {
     const last = voice.last_turn?.revision === config.revision ? voice.last_turn : null;
-    const stage = {configuration:'配置不完整', asr:'识别失败', model:'模型回复失败', playback:'播报失败', completed:'已播报'};
+    const stage = {configuration:'配置不完整', capture:'收音失败', cancelled:'语音已取消', asr:'识别失败', model:'模型回复失败', playback:'播报失败', completed:'已播报'};
     $('voice-state').textContent = voice.busy ? '正在处理' : last ? stage[last.stage] || last.stage : '等待语音';
     $('voice-timing').textContent = last
-      ? '识别 ' + last.asr_ms + ' ms · 模型 ' + last.model_ms + ' ms · 播报 ' + last.playback_ms + ' ms'
+      ? (last.capture_ms ? '收音 ' + last.capture_ms + ' ms · ' : '') + '识别 ' + last.asr_ms + ' ms · 模型 ' + last.model_ms + ' ms · 播报 ' + last.playback_ms + ' ms'
       : '';
   }
   const step = setupStep(config);
   $('first-setup').hidden = !step;
   const service = config.mode === 'external' ? '外部助手' : '大模型';
-  $('setup-next').textContent = step === 'verify'
-    ? `已保存配置。发送一条文字，确认${service}能正常回复。`
-    : '选择大模型厂商，填写模型 ID 和 API Key，然后保存。';
-  $('setup-action').textContent = step === 'verify' ? '验证服务' : '配置大模型';
+  const instructions = {
+    verify: '已保存配置。发送一条文字，确认' + service + '能正常回复。',
+    verify_device: '对音箱喊「' + config.wake_word + '」并说一句话。成功播报后引导会收起。',
+    configure_asr: '先填写 SenseVoice 服务地址，再用音箱完成首次语音验证。',
+    configure: '选择大模型厂商，填写模型 ID 和 API Key，然后保存。'
+  };
+  $('setup-next').textContent = instructions[step] || '';
+  $('setup-action').hidden = step === 'verify_device';
+  $('setup-action').textContent = {verify:'验证服务',configure_asr:'配置语音识别',configure:'配置大模型'}[step] || '';
   if (!settingsDirty && settingsRevision !== config.revision) fillSettings(config);
   const usageSignature=JSON.stringify(serverStatus.usage || []);
   if (usageSignature !== lastUsage) {lastUsage=usageSignature; renderUsage(serverStatus.usage || []);}
@@ -357,8 +388,12 @@ function updateModeActions() {
 }
 $('setting-mode').addEventListener('change', updateModeActions);
 $('setup-action').addEventListener('click', () => {
-  if (setupStep(state.settings) === 'verify') openPreview();
-  else location.hash = 'system';
+  const step = setupStep(state.settings);
+  if (step === 'verify') openPreview();
+  else {
+    location.hash = 'system';
+    if (step === 'configure_asr') setTimeout(() => $('asr-endpoint').focus(), 0);
+  }
 });
 function openPreview() {
   if(settingsDirty){toast('请先保存当前配置，再进行验证');return;}
@@ -392,4 +427,96 @@ $('preview-form').addEventListener('submit',async event=>{
   catch(e){$('preview-result').textContent='';$('preview-form').querySelector('.form-error').textContent=e.message;}
   finally{b.disabled=false;await refresh();}
 });
+let externalTaskRevision;
+let selectedExternalTask;
+let externalRequestID;
+let externalRequestMessage;
+let externalTaskTimer;
+let externalTaskQuery = 0;
+async function loadExternalTasks() {
+  const revision = state.settings?.revision;
+  if (!revision) return;
+  const result = await api('/api/external/tasks');
+  if (revision !== state.settings?.revision) return;
+  externalTaskRevision = revision;
+  $('external-tasks').hidden = !result.available;
+  if (!result.available) {
+    selectedExternalTask = null;
+    clearTimeout(externalTaskTimer);
+    return;
+  }
+  const entries = result.tasks.map(task => {
+    const row = el('article', undefined, 'task-card');
+    row.append(el('strong', when(task.created_at)),button('查看任务', () => showExternalTask(task.id), 'text-button'));
+    const details = el('div'); details.dataset.externalTask = task.id; row.append(details);
+    return row;
+  });
+  $('external-task-list').replaceChildren(...entries);
+  if (result.tasks.some(task => task.id === selectedExternalTask)) await showExternalTask(selectedExternalTask);
+}
+async function showExternalTask(id, method = 'GET') {
+  selectedExternalTask = id;
+  clearTimeout(externalTaskTimer);
+  const query = ++externalTaskQuery;
+  const row = $('external-task-list').querySelector(`[data-external-task="${id}"]`);
+  if (!row) return;
+  try {
+    const result = await api(`/api/external/tasks/${id}`, method);
+    if (query !== externalTaskQuery || !row.isConnected) return;
+    const label = {running:'执行中', cancelling:'正在取消', cancelled:'已取消', completed:'已完成', failed:'失败'};
+    row.replaceChildren(el('p',label[result.status] || result.status));
+    if (result.reply || result.error) row.append(el('pre',result.reply || result.error,'connector-result'));
+    if (result.status === 'running') row.append(button('请求取消', () => showExternalTask(id,'DELETE'), 'text-button'));
+    if (['running','cancelling'].includes(result.status) && !$('tasks').hidden) {
+      externalTaskTimer = setTimeout(() => {
+        if (!$('tasks').hidden) showExternalTask(id);
+      }, 5000);
+    }
+  } catch (error) {
+    if (query === externalTaskQuery && row.isConnected) row.replaceChildren(el('p',error.message,'form-error'));
+  }
+}
+$('external-task-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  const submit = event.submitter;
+  submit.disabled = true;
+  const message = $('external-task-message').value.trim();
+  $('external-task-error').textContent = '';
+  if (message !== externalRequestMessage || !externalRequestID) {
+    externalRequestMessage = message;
+    externalRequestID = crypto.randomUUID().replaceAll('-', '');
+  }
+  try {
+    const result = await api('/api/external/tasks','POST',{message,request_id:externalRequestID});
+    selectedExternalTask = result.id;
+    externalRequestID = null;
+    $('external-task-message').value = '';
+    await loadExternalTasks();
+  } catch (error) {
+    $('external-task-error').textContent = error.message;
+  } finally {
+    submit.disabled = false;
+  }
+});
+$('pair-dialog').addEventListener('cancel', event => event.preventDefault());
+$('pair-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  const submit = event.submitter;
+  submit.disabled = true;
+  $('pair-error').textContent = '';
+  try {
+    await api('/api/session/pair', 'POST', {code: $('pair-code').value});
+    $('pair-code').value = '';
+    await refresh();
+  } catch (error) {
+    $('pair-error').textContent = error.message;
+  } finally {
+    submit.disabled = false;
+  }
+});
+$('owner-logout').addEventListener('click', () => handle(async () => {
+  if (!window.confirm('退出管理后，需要从设备取得新的配对码才能再次登录。')) return;
+  await api('/api/session/logout', 'POST', {});
+  location.reload();
+}, $('owner-logout')));
 page(location.hash.slice(1));refresh();setInterval(refresh,2500);setInterval(updateCountdowns,1000);
