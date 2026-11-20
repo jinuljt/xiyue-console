@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>喜悦 · 控制台</title><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
+<body>
+<aside class="sidebar">
+  <a class="brand" href="#home"><span class="brandmark">悦</span><span>喜悦<small>生活里的小帮手</small></span></a>
+  <nav aria-label="主导航">
+    <button data-page="home" class="selected"><span>◉</span> 总览</button>
+    <button data-page="abilities"><span>✧</span> 能力库</button>
+    <button data-page="tasks"><span>☷</span> 任务与待办</button>
+    <button data-page="schedules"><span>◷</span> 定时计划</button>
+    <button data-page="system"><span>⚙</span> 设备与服务</button>
+  </nav>
+  <div class="sidebar-bottom"><span class="status-dot"></span> 开发预览 <small>v0.1 · 独立运行核心</small></div>
+</aside>
+<main>
+  <header><div><div class="eyebrow">XIYUE CONSOLE</div><h1 id="page-title">让生活，有条不紊。</h1><p id="page-subtitle">能力、待办和日常的小事，都在这里。</p></div><button class="primary" id="new-task">＋ 新建任务</button></header>
+  <div class="preview-note"><span>文字预览模式</span> 本版已运行任务核心，尚未连接音箱、语音识别和大模型；提醒会显示在这里。</div>
+  <div id="connection-error" role="alert" hidden>暂时无法连接服务，页面状态可能已过期。正在重连…</div>
+  <section id="home" class="page">
+    <div class="hero"><div><span class="eyebrow">从一句话，到一件事</span><h2>把日常交给喜悦。</h2><p>先记下一件小事，或开启一段分步引导。</p><button id="quick-todo" class="dark-button">记一件待办 ↗</button></div><div class="hero-orbit" aria-hidden="true"><span>悦</span><i>✦</i></div></div>
+    <div class="stats"><article><span>正在进行</span><strong id="stat-tasks">0</strong><small>需要你确认或正在计时</small></article><article><span>可用能力</span><strong id="stat-abilities">0</strong><small>让每个想法都有行动</small></article><article><span>定时计划</span><strong id="stat-schedules">0</strong><small>到点后自动启动</small></article></div>
+    <div class="two-column"><section><div class="section-heading"><h2>手头的事</h2><button class="text-button" data-go="tasks">查看全部 →</button></div><div id="home-tasks"></div></section><section><div class="section-heading"><h2>喜悦的回应</h2><span class="muted">文字预览</span></div><div id="home-events" class="event-list"></div></section></div>
+  </section>
+  <section id="abilities" class="page" hidden><div class="section-heading"><p>添加能力、填写配置，再决定什么时候使用。</p><button id="import-ability" class="secondary">＋ 导入能力 JSON</button><input id="ability-file" type="file" accept="application/json,.json" hidden></div><div id="ability-list" class="ability-grid"></div></section>
+  <section id="tasks" class="page" hidden><div class="section-heading"><p>待办不会因提醒过就自动完成。确认、暂停和继续，都由你决定。</p></div><div id="task-list"></div></section>
+  <section id="schedules" class="page" hidden><div class="section-heading"><p>支持一次性、每天和工作日。创建任务时选择执行时间即可。</p><button id="new-schedule" class="secondary">＋ 添加计划</button></div><div id="schedule-list"></div></section>
+  <section id="system" class="page" hidden><div class="system-card"><h2>当前连接情况</h2><dl><dt>任务核心</dt><dd>运行中 · 本地持久化</dd><dt>控制台连接</dt><dd>本机开发服务</dd><dt>语音合成</dt><dd>文字预览 · 目标默认使用音箱系统服务</dd><dt>语音识别 ASR</dt><dd>未接入</dd><dt>大模型 LLM</dt><dd>未接入</dd><dt>外部 Agent</dt><dd>未接入</dd><dt>托管服务</dt><dd>规划中 · 后续提供免配置选项</dd></dl><p class="muted">本页如实显示当前实现。设备配对、语音接管和付费服务尚未开放。</p></div></section>
+  <footer>喜悦 · 把生活的小事，认真接住。</footer>
+</main>
+<dialog id="task-dialog"><form id="task-form"><div class="dialog-heading"><h2>创建任务</h2><button type="button" data-close aria-label="关闭">×</button></div><label>使用什么能力？<select id="task-ability" required></select></label><div id="task-fields"></div><label>什么时候执行？<select id="task-when"><option value="now">现在</option><option value="once">指定时间，一次</option><option value="daily">每天</option><option value="weekdays">每个工作日</option></select></label><label id="date-label" hidden>首次执行时间<input id="task-date" type="datetime-local"></label><p class="muted" id="timezone-note"></p><p class="form-error" role="alert"></p><button class="primary" type="submit">创建</button></form></dialog>
+<dialog id="config-dialog"><form id="config-form"><div class="dialog-heading"><h2 id="config-title">能力配置</h2><button type="button" data-close aria-label="关闭">×</button></div><p id="config-description" class="muted"></p><label class="check-label"><input id="config-enabled" type="checkbox">启用此能力（现有任务不受停用影响）</label><div id="config-fields"></div><p class="form-error" role="alert"></p><button class="primary" type="submit">保存配置</button></form></dialog>
+<div id="toast" role="status" hidden></div>
+</body></html>
