@@ -5,30 +5,46 @@
 <aside class="sidebar">
   <a class="brand" href="#home"><span class="brandmark">悦</span><span>喜悦<small>生活里的小帮手</small></span></a>
   <nav aria-label="主导航">
-    <button data-page="home" class="selected"><span>◉</span> 总览</button>
-    <button data-page="abilities"><span>✧</span> 能力库</button>
+    <button data-page="home" class="selected"><span>◉</span> 系统总览</button>
+    <button data-page="system"><span>⚙</span> 系统配置</button>
+    <button data-page="abilities"><span>✧</span> 能力管理</button>
+    <button data-page="usage"><span>▥</span> 状态与用量</button>
+    <div class="nav-caption">功能运行</div>
     <button data-page="tasks"><span>☷</span> 任务与待办</button>
     <button data-page="schedules"><span>◷</span> 定时计划</button>
-    <button data-page="system"><span>⚙</span> 设备与服务</button>
   </nav>
-  <div class="sidebar-bottom"><span class="status-dot"></span> 开发预览 <small>v0.1 · 独立运行核心</small></div>
+  <div class="sidebar-bottom"><span class="status-dot"></span> 管理服务 <small>v0.2 · 配置与监控</small></div>
 </aside>
 <main>
-  <header><div><div class="eyebrow">XIYUE CONSOLE</div><h1 id="page-title">让生活，有条不紊。</h1><p id="page-subtitle">能力、待办和日常的小事，都在这里。</p></div><button class="primary" id="new-task">＋ 新建任务</button></header>
-  <div class="preview-note"><span>文字预览模式</span> 本版已运行任务核心，尚未连接音箱、语音识别和大模型；提醒会显示在这里。</div>
+  <header><div><div class="eyebrow">XIYUE CONSOLE</div><h1 id="page-title">系统总览</h1><p id="page-subtitle">配置服务、管理能力，了解喜悦的运行情况。</p></div><div class="header-actions"><button class="primary" id="open-settings">配置系统</button><button class="primary" id="new-task" hidden>＋ 新建任务</button></div></header>
+  <div class="preview-note"><span>当前环境：本机开发服务</span> 音箱尚未连接。模型文字调用可单独验证，语音配置保存后仍需接入音箱运行链路。</div>
   <div id="connection-error" role="alert" hidden>暂时无法连接服务，页面状态可能已过期。正在重连…</div>
   <section id="home" class="page">
-    <div class="hero"><div><span class="eyebrow">从一句话，到一件事</span><h2>把日常交给喜悦。</h2><p>先记下一件小事，或开启一段分步引导。</p><button id="quick-todo" class="dark-button">记一件待办 ↗</button></div><div class="hero-orbit" aria-hidden="true"><span>悦</span><i>✦</i></div></div>
-    <div class="stats"><article><span>正在进行</span><strong id="stat-tasks">0</strong><small>需要你确认或正在计时</small></article><article><span>可用能力</span><strong id="stat-abilities">0</strong><small>让每个想法都有行动</small></article><article><span>定时计划</span><strong id="stat-schedules">0</strong><small>到点后自动启动</small></article></div>
-    <div class="two-column"><section><div class="section-heading"><h2>手头的事</h2><button class="text-button" data-go="tasks">查看全部 →</button></div><div id="home-tasks"></div></section><section><div class="section-heading"><h2>喜悦的回应</h2><span class="muted">文字预览</span></div><div id="home-events" class="event-list"></div></section></div>
+    <div class="overview-banner"><div><span class="eyebrow">配置进度</span><h2 id="setup-title">先连接你的模型服务</h2><p id="setup-description">选择服务商，填写地址、模型和密钥，保存后可发起文字验证。</p></div><button class="primary" data-go="system">开始配置 →</button></div>
+    <div class="stats overview-stats"><article><span>音箱连接</span><strong class="text-stat">未连接</strong><small>尚未连接你的音箱</small></article><article><span>任务运行服务</span><strong class="text-stat" id="runtime-state">连接中</strong><small id="runtime-uptime">正在读取实时状态</small></article><article><span>已启用能力</span><strong id="stat-abilities">0</strong><small>在能力管理中配置与启停</small></article></div>
+    <div class="section-heading"><h2>服务配置</h2><button class="text-button" data-go="system">管理全部配置 →</button></div><div id="service-overview" class="service-grid"></div>
+    <div class="section-heading"><h2>接下来要做什么</h2></div><div id="setup-checklist" class="system-card"></div>
   </section>
-  <section id="abilities" class="page" hidden><div class="section-heading"><p>添加能力、填写配置，再决定什么时候使用。</p><button id="import-ability" class="secondary">＋ 导入能力 JSON</button><input id="ability-file" type="file" accept="application/json,.json" hidden></div><div id="ability-list" class="ability-grid"></div></section>
-  <section id="tasks" class="page" hidden><div class="section-heading"><p>待办不会因提醒过就自动完成。确认、暂停和继续，都由你决定。</p></div><div id="task-list"></div></section>
+  <section id="abilities" class="page" hidden><div class="section-heading"><p>管理功能的配置、凭证与启用状态。任务参数在实际使用时填写。</p><button id="import-ability" class="secondary">＋ 导入能力 JSON</button><input id="ability-file" type="file" accept="application/json,.json" hidden></div><div id="ability-list" class="ability-grid"></div></section>
+  <section id="tasks" class="page" hidden><div class="section-heading"><p>待办不会因提醒过就自动完成。确认、暂停和继续，都由你决定。</p></div><div id="task-list"></div><details class="task-log"><summary>任务提示记录</summary><div id="home-events" class="event-list"></div></details></section>
   <section id="schedules" class="page" hidden><div class="section-heading"><p>支持一次性、每天和工作日。创建任务时选择执行时间即可。</p><button id="new-schedule" class="secondary">＋ 添加计划</button></div><div id="schedule-list"></div></section>
-  <section id="system" class="page" hidden><div class="system-card"><h2>当前连接情况</h2><dl><dt>任务核心</dt><dd>运行中 · 本地持久化</dd><dt>控制台连接</dt><dd>本机开发服务</dd><dt>语音合成</dt><dd>文字预览 · 目标默认使用音箱系统服务</dd><dt>语音识别 ASR</dt><dd>未接入</dd><dt>大模型 LLM</dt><dd>未接入</dd><dt>外部 Agent</dt><dd>未接入</dd><dt>托管服务</dt><dd>规划中 · 后续提供免配置选项</dd></dl><p class="muted">本页如实显示当前实现。设备配对、语音接管和付费服务尚未开放。</p></div></section>
+  <section id="system" class="page" hidden>
+    <form id="settings-form">
+      <div class="settings-toolbar"><span id="settings-save-state" class="muted">正在加载配置…</span><div><button type="button" id="reload-settings" class="secondary">重新加载</button><button type="submit" class="primary">保存配置</button></div></div>
+      <section class="settings-panel"><div class="panel-heading"><h2>基本设置</h2><p>管理助手名称、唤醒词和默认时区。</p></div><div class="field-grid"><label>设备名称<input id="setting-name" required maxlength="120"></label><label>唤醒词<input id="setting-wake" required maxlength="48"></label><label>时区<input id="setting-timezone" required placeholder="Asia/Shanghai"></label><label>运行模式<select id="setting-mode"><option value="direct">直连大模型</option><option value="external">仅使用外部 Agent</option><option value="hybrid">大模型 + 外部 Agent</option></select></label></div><p class="muted">基本设置已支持保存。唤醒词将在音箱接入后应用；混合模式暂不支持文字验证。</p></section>
+      <div id="service-settings"></div>
+      <p class="form-error" id="settings-error" role="alert"></p>
+    </form>
+  </section>
+  <section id="usage" class="page" hidden>
+    <div class="stats overview-stats"><article><span>服务请求</span><strong id="usage-requests">0</strong><small>最近 500 条真实调用记录</small></article><article><span>输入 / 输出 Token</span><strong class="text-stat" id="usage-tokens">—</strong><small id="usage-token-note">尚无服务商返回的用量</small></article><article><span>费用与账户额度</span><strong class="text-stat">未接入账单</strong><small>自配服务请以服务商账单为准</small></article></div>
+    <div class="two-column"><div class="system-card"><h2>运行状态</h2><dl><dt>运行环境</dt><dd id="status-platform">读取中</dd><dt>服务运行时间</dt><dd id="status-uptime">—</dd><dt>程序堆内存</dt><dd id="status-memory">—</dd><dt>音箱与麦克风</dt><dd>未连接</dd><dt>模型调用</dt><dd>已提供文字验证接口，需完成配置</dd><dt>语音识别 / 播报</dt><dd>适配尚未接入</dd></dl></div><div class="system-card"><h2>用量说明</h2><p class="muted">只记录服务、模型、时间、耗时、调用结果及服务商返回的 Token 数，不保存对话原文和密钥。</p><p class="muted">没有返回 Token 的调用显示“未提供”，不会估算成零。ASR 音频时长、TTS 字数、托管套餐及余额将在相应服务接入后统计。</p><button id="open-preview" class="secondary">发起一次文字验证</button></div></div>
+    <div class="section-heading"><h2>最近调用</h2><span class="muted">不含对话内容</span></div><div id="usage-history" class="usage-history"></div>
+  </section>
   <footer>喜悦 · 把生活的小事，认真接住。</footer>
 </main>
 <dialog id="task-dialog"><form id="task-form"><div class="dialog-heading"><h2>创建任务</h2><button type="button" data-close aria-label="关闭">×</button></div><label>使用什么能力？<select id="task-ability" required></select></label><div id="task-fields"></div><label>什么时候执行？<select id="task-when"><option value="now">现在</option><option value="once">指定时间，一次</option><option value="daily">每天</option><option value="weekdays">每个工作日</option></select></label><label id="date-label" hidden>首次执行时间<input id="task-date" type="datetime-local"></label><p class="muted" id="timezone-note"></p><p class="form-error" role="alert"></p><button class="primary" type="submit">创建</button></form></dialog>
 <dialog id="config-dialog"><form id="config-form"><div class="dialog-heading"><h2 id="config-title">能力配置</h2><button type="button" data-close aria-label="关闭">×</button></div><p id="config-description" class="muted"></p><label class="check-label"><input id="config-enabled" type="checkbox">启用此能力（现有任务不受停用影响）</label><div id="config-fields"></div><p class="form-error" role="alert"></p><button class="primary" type="submit">保存配置</button></form></dialog>
+<dialog id="preview-dialog"><form id="preview-form"><div class="dialog-heading"><h2>验证已保存的服务</h2><button type="button" data-close aria-label="关闭">×</button></div><p class="muted">按运行模式调用已保存的模型或外部 Agent。此操作会向对应服务发送文字，可能产生服务商费用，不录音、不播报。</p><label>验证文字<input id="preview-message" required maxlength="16000" placeholder="输入一句想询问的话"></label><p id="preview-result" class="task-text"></p><p class="form-error" role="alert"></p><button type="submit" class="primary">发送验证</button></form></dialog>
 <div id="toast" role="status" hidden></div>
 </body></html>

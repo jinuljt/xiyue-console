@@ -4,19 +4,26 @@ let state = {abilities: {}, tasks: [], schedules: [], events: []};
 let editingAbility = null;
 let refreshBusy = false;
 let lastSnapshot = '';
+let providerOptions = null;
+let settingsDirty = false;
+let settingsRevision = 0;
+let lastConfig = '';
+let lastUsage = '';
+let serverStatus = null;
 const titles = {
-  home: ['让生活，有条不紊。', '能力、待办和日常的小事，都在这里。'],
-  abilities: ['给喜悦，多一点本领。', '配置和启用能力，也可以导入你自己编写的流程。'],
-  tasks: ['一件一件，慢慢完成。', '每个任务都有自己的进度，中途离开也不会丢失。'],
-  schedules: ['到点，就交给喜悦。', '让提醒按时到来，让重复的小事自动发生。'],
-  system: ['知道喜悦的近况。', '连接、设备与服务状态，如实呈现。']
+  home: ['系统总览', '配置服务、管理能力，了解喜悦的运行情况。'],
+  system: ['系统配置', '选择语音与模型服务，配置外部 Agent 和基础设置。'],
+  abilities: ['能力管理', '配置功能、管理授权，并启用你需要的能力。'],
+  usage: ['状态与用量', '查看运行情况与真实调用记录。'],
+  tasks: ['任务与待办', '查看功能执行进度，确认、暂停或取消任务。'],
+  schedules: ['定时计划', '管理能力的定时执行。']
 };
 const statusNames = {waiting: '等待确认', timer: '计时中', paused: '已暂停', done: '已完成', cancelled: '已取消', running: '进行中'};
 function el(tag, text, className) {const e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (className) e.className = className; return e;}
 function button(text, handler, cls = '') {const b = el('button', text, cls); b.type = 'button'; b.addEventListener('click', () => handle(handler, b)); return b;}
 function toast(text) {$('toast').textContent = text; $('toast').hidden = false; clearTimeout(toast.timer); toast.timer = setTimeout(() => {$('toast').hidden = true;}, 4500);}
 async function api(path, method = 'GET', body) {
-  const response = await fetch(path, {method, headers: {'Content-Type': 'application/json', 'X-Xiyue-Request': 'console'}, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(10000)});
+  const response = await fetch(path, {method, headers: {'Content-Type': 'application/json', 'X-Xiyue-Request': 'console'}, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(path === "/api/preview/chat" ? 50000 : 10000)});
   if (!response.ok) {let message = '操作失败，请重试'; try {message = (await response.json()).error || message;} catch {} throw new Error(message);}
   return response.json();
 }
@@ -26,6 +33,8 @@ function page(name) {
   document.querySelectorAll('.page').forEach(p => {p.hidden = p.id !== name;});
   document.querySelectorAll('[data-page]').forEach(b => b.classList.toggle('selected', b.dataset.page === name));
   $('page-title').textContent = titles[name][0]; $('page-subtitle').textContent = titles[name][1];
+  $('new-task').hidden = !['tasks', 'schedules'].includes(name);
+  $('open-settings').hidden = name === 'system';
 }
 function when(iso) {return new Date(iso).toLocaleString('zh-CN', {month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});}
 function active(t) {return !['done', 'cancelled'].includes(t.status);}
@@ -49,9 +58,7 @@ function empty(text) {return el('div', text, 'empty');}
 function renderTasks() {
   const tasks = [...state.tasks].reverse();
   $('task-list').replaceChildren(...(tasks.length ? tasks.map(taskCard) : [empty('还没有任务。先记一件待办吧。')]));
-  const ongoing = tasks.filter(active).slice(0, 4);
-  $('home-tasks').replaceChildren(...(ongoing.length ? ongoing.map(taskCard) : [empty('暂时没有挂心的事。')]));
-  $('stat-tasks').textContent = tasks.filter(active).length;
+
 }
 function renderAbilities() {
   const abilities = Object.values(state.abilities).sort((a,b) => a.manifest.id.localeCompare(b.manifest.id));
@@ -67,7 +74,7 @@ function renderAbilities() {
   }));
 }
 function renderSchedules() {
-  $('stat-schedules').textContent = state.schedules.filter(s => s.enabled).length;
+
   $('schedule-list').replaceChildren(...(state.schedules.length ? state.schedules.map(sc => {
     const card = el('article', undefined, 'schedule-card');
     const top = el('div', undefined, 'card-top'); top.append(el('h3', state.abilities[sc.ability_id]?.manifest.name || sc.ability_id), el('span', sc.enabled ? '已启用' : '已执行', 'badge'));
@@ -88,11 +95,12 @@ function updateCountdowns() {document.querySelectorAll('[data-due]').forEach(e =
 async function refresh() {
   if (refreshBusy) return; refreshBusy = true;
   try {
-    const next = await api('/api/state'); $('connection-error').hidden = true;
+    if (!providerOptions) providerOptions = await api('/api/providers');
+    const [next, status] = await Promise.all([api('/api/state'), api('/api/status')]); serverStatus = status; $('connection-error').hidden = true;
     const snapshot = JSON.stringify(next);
     // Preserve button focus and click targets while polling unchanged state.
     if (snapshot !== lastSnapshot) {state = next; lastSnapshot = snapshot; renderTasks(); renderAbilities(); renderSchedules(); renderEvents();}
-    updateCountdowns();
+    renderManagement(); updateCountdowns();
   }
   catch { $('connection-error').hidden = false; }
   finally {refreshBusy = false;}
@@ -100,18 +108,20 @@ async function refresh() {
 function fieldsFor(ability, container, mode) {
   container.replaceChildren();
   for (const f of ability.manifest.fields) {
-    if (mode === 'task' && f.kind === 'credential_ref') continue;
+    if (mode === 'task' && ['credential_ref', 'secret'].includes(f.kind)) continue;
     const label = el('label', f.label + (f.required ? ' *' : ''));
-    const input = el('input'); input.name = f.key; input.type = f.kind === 'number' ? 'number' : 'text'; input.maxLength = 2000;
+    const input = el('input'); input.name = f.key; input.type = f.kind === 'number' ? 'number' : f.kind === 'secret' ? 'password' : 'text'; input.dataset.kind = f.kind; input.maxLength = 2000;
     if (input.type === 'number') input.step = 'any';
     input.value = ability.config[f.key] ?? f.default ?? ''; input.required = mode === 'task' && f.required;
     if (f.kind === 'credential_ref') {input.placeholder = 'bitwarden:item:条目UUID'; input.pattern = 'bitwarden:item:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}';}
+    if (f.kind === 'secret') {input.value = ''; input.autocomplete = 'new-password'; input.placeholder = ability.config[f.key] ? '已配置，留空保留' : '请输入密钥';}
     label.append(input);
+    if (f.kind === 'secret' && ability.config[f.key]) {const clear=el('input');clear.type='checkbox';clear.dataset.clearSecret=f.key;const clearLabel=el('label','清除此密钥','check-label');clearLabel.append(clear);container.append(clearLabel);}
     if (f.kind === 'credential_ref') label.append(el('small', '首版只保存 Bitwarden 条目引用，不读取凭证、不接受明文密钥。', 'muted'));
     container.append(label);
   }
 }
-function fieldValues(container) {return Object.fromEntries([...container.querySelectorAll('input')].map(i => [i.name, i.value]));}
+function fieldValues(container) {return Object.fromEntries([...container.querySelectorAll('input:not([data-kind=secret]):not([data-clear-secret])')].map(i => [i.name, i.value]));}
 function openTask(abilityID = 'todo', schedule = false) {
   const choices = Object.values(state.abilities).filter(a => a.enabled);
   if (!choices.length) {toast('请先启用一个能力'); return;}
@@ -142,10 +152,11 @@ $('task-form').addEventListener('submit', e => submitForm(e, async () => {
   if ($('task-when').value === 'now') await api('/api/tasks', 'POST', body);
   else {body.next_at = new Date($('task-date').value).toISOString(); body.repeat = $('task-when').value; body.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone; await api('/api/schedules', 'POST', body);}
 }));
-$('config-form').addEventListener('submit', e => submitForm(e, () => api(`/api/abilities/${editingAbility}`, 'PUT', {enabled: $('config-enabled').checked, config: fieldValues($('config-fields'))})));
+$('config-form').addEventListener('submit', e => submitForm(e, () => api(`/api/abilities/${editingAbility}`, 'PUT', {enabled: $('config-enabled').checked, config: fieldValues($('config-fields')), secrets: Object.fromEntries([...$('config-fields').querySelectorAll('input[data-kind=secret]')].filter(i => i.value).map(i => [i.name,i.value])), clear_secrets: [...$('config-fields').querySelectorAll('input[data-clear-secret]:checked')].map(i=>i.dataset.clearSecret)})));
 $('task-ability').addEventListener('change', () => fieldsFor(state.abilities[$('task-ability').value], $('task-fields'), 'task'));
 $('task-when').addEventListener('change', updateWhen);
-$('new-task').addEventListener('click', () => openTask()); $('quick-todo').addEventListener('click', () => openTask('todo'));
+$('new-task').addEventListener('click', () => openTask());
+$('open-settings').addEventListener('click', () => {location.hash = 'system';});
 $('new-schedule').addEventListener('click', () => openTask('reminder', true));
 $('import-ability').addEventListener('click', () => $('ability-file').click());
 $('ability-file').addEventListener('change', () => handle(async () => {
@@ -157,4 +168,107 @@ document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click
 document.querySelectorAll('[data-page]').forEach(b => b.addEventListener('click', () => {location.hash = b.dataset.page;}));
 document.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => {location.hash = b.dataset.go;}));
 window.addEventListener('hashchange', () => page(location.hash.slice(1)));
-page(location.hash.slice(1)); refresh(); setInterval(refresh, 2500); setInterval(updateCountdowns, 1000);
+
+const serviceNames = {asr:'语音识别 ASR',llm:'大模型 LLM',tts:'语音合成 TTS',external:'外部 Agent'};
+function formatDuration(seconds) {return seconds < 60 ? `${seconds} 秒` : `${Math.floor(seconds/60)} 分 ${seconds%60} 秒`;}
+function readiness(name, config) {
+  if (name === 'tts' && config.provider === 'system') return ['使用系统语音','连接音箱后启用'];
+  if (!config.endpoint) return ['待配置','尚未填写服务地址'];
+  if (name === 'llm' && !config.model) return ['待配置','尚未填写模型名称'];
+  const recent = [...(serverStatus?.usage || [])].reverse().find(u => u.service === name && u.config_revision === state.settings.revision);
+  if (recent) return recent.success ? ['文字验证通过','仅验证文字接口，语音链路尚未连接'] : ['调用失败',`错误：${recent.error_code}`];
+  if (name === 'llm' && !config.key_configured) return ['未配置密钥','本地免密服务可直接进行文字验证'];
+  return ['已保存，待验证',['asr','tts'].includes(name) ? '配置已保存，运行适配尚未接入' : '可通过文字验证检查服务'];
+}
+function renderManagement() {
+  const config = state.settings; if (!config) return;
+  $('runtime-state').textContent = '运行中';
+  $('runtime-uptime').textContent = `已运行 ${formatDuration(serverStatus.uptime_seconds)}`;
+  $('status-platform').textContent = `${serverStatus.platform} · 本机开发服务`;
+  $('status-uptime').textContent = formatDuration(serverStatus.uptime_seconds);
+  $('status-memory').textContent = `${(serverStatus.memory_bytes / 1024 / 1024).toFixed(1)} MiB（非进程总内存 / 整机内存）`;
+  const signature = JSON.stringify([config, serverStatus.usage]);
+  if (signature !== lastConfig) {
+    lastConfig = signature;
+    $('service-overview').replaceChildren(...Object.entries(serviceNames).map(([name,label]) => {
+      const value = config[name]; const option = providerOptions[name].find(p => p.id === value.provider); const [status,note] = readiness(name,value);
+      const card = el('article', undefined, 'service-card'); const top = el('div', undefined, 'card-top');
+      top.append(el('h3',label),el('span',status,'badge '+(status.includes('失败') ? 'error' : 'waiting')));
+      card.append(top,el('p',option?.name || value.provider,'service-provider'),el('p',name === 'llm' ? value.model || '尚未选择模型' : note,'muted'));
+      card.append(button('配置',() => {location.hash='system'; setTimeout(() => $(`settings-${name}`)?.scrollIntoView({behavior:'smooth',block:'start'}),0);},'text-button'));
+      return card;
+    }));
+    const llmReady = config.llm.endpoint && config.llm.model && config.llm.key_configured;
+    $('setup-title').textContent = llmReady ? '模型配置已保存，下一步验证服务' : '先完成系统服务配置';
+    $('setup-description').textContent = llmReady ? '保存配置不代表已连接。可以发送一段文字，验证模型回复和用量记录。' : '配置 ASR、大模型与语音合成，也可以连接外部 Agent。';
+    const steps = [
+      [!!config.updated_at,'保存基本设置','设备名称、唤醒词和时区'],
+      [!!llmReady,'配置大模型','服务商、服务地址、模型和密钥'],
+      [!!config.asr.endpoint,'配置语音识别','云端服务或自建 SenseVoice'],
+      [false,'接入音箱语音链路','尚未完成；不会把开发服务当作已连接音箱']
+    ];
+    $('setup-checklist').replaceChildren(...steps.map(([done,title,note]) => {const row=el('div',undefined,'checklist-row'); row.append(el('span',done?'✓':'○',done?'check-done':'muted'),el('strong',title),el('span',note,'muted'));return row;}));
+  }
+  if (!settingsDirty && settingsRevision !== config.revision) fillSettings(config);
+  const usageSignature=JSON.stringify(serverStatus.usage || []);
+  if (usageSignature !== lastUsage) {lastUsage=usageSignature; renderUsage(serverStatus.usage || []);}
+}
+function renderUsage(records) {
+  $('usage-requests').textContent = records.length;
+  const measured=records.filter(r => r.input_tokens !== undefined || r.output_tokens !== undefined);
+  $('usage-tokens').textContent=measured.length ? `${measured.reduce((n,r)=>n+(r.input_tokens||0),0).toLocaleString()} / ${measured.reduce((n,r)=>n+(r.output_tokens||0),0).toLocaleString()}` : '—';
+  $('usage-token-note').textContent=measured.length ? `${measured.length} 条调用返回用量；其余不估算` : '尚无服务商返回的用量';
+  if (!records.length) {$('usage-history').replaceChildren(empty('暂无调用记录。配置模型后，可手动发起文字验证。'));return;}
+  const table=el('table');const head=el('tr');for (const text of ['时间','服务 / 模型','结果','耗时','输入 / 输出 Token']) head.append(el('th',text));table.append(head);
+  for (const r of [...records].reverse()) {const row=el('tr');for (const text of [when(r.at),`${serviceNames[r.service] || r.service} · ${r.model || r.provider}`,r.success?'成功':`失败 · ${r.error_code}`,`${r.duration_ms} ms`,`${r.input_tokens ?? '未提供'} / ${r.output_tokens ?? '未提供'}`]) row.append(el('td',text));table.append(row);}
+  $('usage-history').replaceChildren(table);
+}
+function inputLabel(title,input) {const label=el('label',title);label.append(input);return label;}
+function fillSettings(config) {
+  settingsRevision=config.revision;
+  $('setting-name').value=config.name; $('setting-wake').value=config.wake_word; $('setting-timezone').value=config.timezone; $('setting-mode').value=config.mode;
+  $('settings-save-state').textContent=config.updated_at ? `已保存 · ${when(config.updated_at)}` : '默认配置尚未保存';
+  $('service-settings').replaceChildren(...Object.entries(serviceNames).map(([name,title])=>{
+    const current=config[name];const panel=el('section',undefined,'settings-panel');panel.id=`settings-${name}`;
+    const heading=el('div',undefined,'panel-heading');heading.append(el('h2',title));panel.append(heading);
+    const grid=el('div',undefined,'field-grid');
+    const provider=el('select');provider.id=`${name}-provider`;
+    for (const option of providerOptions[name]) {const opt=el('option',option.name);opt.value=option.id;provider.append(opt);} provider.value=current.provider;
+    const endpoint=el('input');endpoint.id=`${name}-endpoint`;endpoint.value=current.endpoint;endpoint.type='url';endpoint.maxLength=2000;endpoint.placeholder=name==='external'?'完整 Agent 调用 URL':'https://服务地址/版本前缀';
+    const model=el('input');model.id=`${name}-model`;model.value=current.model;model.maxLength=200;model.placeholder=name==='tts'?'音色 ID（外部语音）':'按服务商控制台填写';
+    const key=el('input');key.id=`${name}-key`;key.type='password';key.autocomplete='new-password';key.maxLength=8192;key.placeholder=current.key_configured?'已配置，留空保留原密钥':'填写服务 API Key（可选）';
+    const keyLabel=inputLabel('服务密钥',key);keyLabel.append(el('small',current.key_configured?'密钥已保存，不会回显。':'密钥独立加密保存，不进入普通配置和日志。','muted'));
+    const clear=el('input');clear.type='checkbox';clear.id=`${name}-clear`;const clearLabel=inputLabel('清除已保存的密钥',clear);clearLabel.className='check-label';clearLabel.hidden=!current.key_configured;
+    const modelLabel=inputLabel(name==='tts'?'音色 / 模型':name==='asr'?'模型 / 资源 ID':'模型名称',model);modelLabel.hidden=name==='external';
+    const endpointLabel=inputLabel(name==='external'?'调用地址':'服务地址（Base URL）',endpoint);grid.append(inputLabel('服务商',provider),endpointLabel,modelLabel,keyLabel);
+    const note=el('p',undefined,'muted');note.id=`${name}-note`;
+    const update=()=>{const selected=providerOptions[name].find(p=>p.id===provider.value);note.textContent=selected?.note || '';const system=name==='tts' && provider.value==='system';endpoint.disabled=system;model.disabled=system;key.disabled=system;endpointLabel.hidden=system;modelLabel.hidden=system||name==='external';keyLabel.hidden=system;};
+    provider.addEventListener('change',()=>{const selected=providerOptions[name].find(p=>p.id===provider.value);endpoint.value=selected?.endpoint || '';model.value=selected?.model || '';update();});
+    update();panel.append(grid,clearLabel,note);
+    if(name==='llm'||name==='external')panel.append(button('验证已保存的配置',openPreview,'secondary'));
+    return panel;
+  }));
+}
+function openPreview() {
+  if(settingsDirty){toast('请先保存当前配置，再进行验证');return;}
+  $('preview-form').querySelector('.form-error').textContent='';$('preview-result').textContent='';$('preview-dialog').showModal();
+}
+$('open-preview').addEventListener('click',openPreview);
+$('settings-form').addEventListener('input',()=>{settingsDirty=true;$('settings-save-state').textContent='有未保存的修改';});
+$('settings-form').addEventListener('change',()=>{settingsDirty=true;$('settings-save-state').textContent='有未保存的修改';});
+$('reload-settings').addEventListener('click',()=>handle(async()=>{const config=await api('/api/settings');settingsDirty=false;fillSettings(config);$('settings-error').textContent='';}));
+$('settings-form').addEventListener('submit',async event=>{
+  event.preventDefault();const b=event.currentTarget.querySelector('[type=submit]');b.disabled=true;$('settings-error').textContent='';
+  try{
+    const payload={revision:settingsRevision,name:$('setting-name').value,wake_word:$('setting-wake').value,timezone:$('setting-timezone').value,mode:$('setting-mode').value};
+    for(const name of Object.keys(serviceNames))payload[name]={provider:$(`${name}-provider`).value,endpoint:$(`${name}-endpoint`).value,model:$(`${name}-model`).value,api_key:$(`${name}-key`).value,clear_key:$(`${name}-clear`).checked};
+    const config=await api('/api/settings','PUT',payload);settingsDirty=false;fillSettings(config);await refresh();toast('系统配置已保存；尚未验证的服务不会显示为已连接');
+  }catch(e){$('settings-error').textContent=e.message;}finally{b.disabled=false;}
+});
+$('preview-form').addEventListener('submit',async event=>{
+  event.preventDefault();const b=event.currentTarget.querySelector('[type=submit]');b.disabled=true;$('preview-result').textContent='正在调用已保存的服务…';event.currentTarget.querySelector('.form-error').textContent='';
+  try{const result=await api('/api/preview/chat','POST',{message:$('preview-message').value});$('preview-result').textContent=result.reply;}
+  catch(e){$('preview-result').textContent='';$('preview-form').querySelector('.form-error').textContent=e.message;}
+  finally{b.disabled=false;await refresh();}
+});
+page(location.hash.slice(1));refresh();setInterval(refresh,2500);setInterval(updateCountdowns,1000);
