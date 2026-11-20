@@ -76,9 +76,16 @@ function renderSchedules() {
 
   $('schedule-list').replaceChildren(...(state.schedules.length ? state.schedules.map(sc => {
     const card = el('article', undefined, 'schedule-card');
-    const top = el('div', undefined, 'card-top'); top.append(el('h3', state.abilities[sc.ability_id]?.manifest.name || sc.ability_id), el('span', sc.enabled ? '已启用' : '已执行', 'badge'));
+    const top = el('div', undefined, 'card-top'); const waitingRetry = sc.enabled && sc.repeat === 'once' && sc.failure;
+    const label = waitingRetry ? '执行失败' : sc.enabled ? '已启用' : '任务已创建';
+    top.append(el('h3', state.abilities[sc.ability_id]?.manifest.name || sc.ability_id), el('span', label, 'badge'));
     card.append(top, el('p', `${when(sc.next_at)} · ${{once:'一次',daily:'每天',weekdays:'工作日'}[sc.repeat]} · ${sc.timezone}`, 'muted'));
     if (sc.inputs.content) card.append(el('p', sc.inputs.content, 'task-text'));
+    if (sc.failure) card.append(el('p', sc.failure, 'form-error'));
+    if (waitingRetry) card.append(button('重试一次', async () => {
+      await api(`/api/schedules/${sc.id}/retry`, 'POST', {});
+      await refresh();
+    }, 'text-button'));
     card.append(button('删除计划', async () => {await api(`/api/schedules/${sc.id}`, 'DELETE'); await refresh();}, 'text-button'));
     return card;
   }) : [empty('还没有定时计划。可以先添加一个明天的提醒。')]));
