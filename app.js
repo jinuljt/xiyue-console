@@ -227,7 +227,7 @@ function renderManagement() {
   $('voice-monitor').hidden = !voice?.available;
   if (voice?.available) {
     const last = voice.last_turn?.revision === config.revision ? voice.last_turn : null;
-    const stage = {configuration:'配置不完整', capture:'收音失败', cancelled:'语音已取消', asr:'识别失败', model:'模型回复失败', playback:'播报失败', completed:'已播报'};
+    const stage = {configuration:'配置不完整', capture:'收音失败', cancelled:'语音已取消', local_task:'本地任务创建失败', asr:'识别失败', model:'模型回复失败', playback:'播报失败', completed:'已播报'};
     $('voice-state').textContent = voice.busy ? '正在处理' : last ? stage[last.stage] || last.stage : '等待语音';
     $('voice-timing').textContent = last
       ? (last.capture_ms ? '收音 ' + last.capture_ms + ' ms · ' : '') + '识别 ' + last.asr_ms + ' ms · 模型 ' + last.model_ms + ' ms · 播报 ' + last.playback_ms + ' ms'

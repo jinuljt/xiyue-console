@@ -13,7 +13,7 @@
     <button data-page="tasks"><span>☷</span> 任务与待办</button>
     <button data-page="schedules"><span>◷</span> 定时计划</button>
   </nav>
-  <div class="sidebar-bottom"><span class="status-dot"></span> 管理服务 <button id="owner-logout" type="button" hidden>退出管理</button></div>
+  <div class="sidebar-bottom"><span class="status-dot"></span> 管理服务</div>
 </aside>
 <main>
   <header><div><div class="eyebrow">XIYUE CONSOLE</div><h1 id="page-title">系统总览</h1><p id="page-subtitle">配置服务、管理能力，了解喜悦的运行情况。</p></div><div class="header-actions"><button class="primary" id="new-task" hidden>＋ 新建任务</button></div></header>
@@ -40,7 +40,7 @@
   <section id="schedules" class="page" hidden><div class="section-heading"><p>支持一次性、每天和工作日。创建任务时选择执行时间即可。</p><button id="new-schedule" class="secondary">＋ 添加计划</button></div><div id="schedule-list"></div></section>
   <section id="system" class="page" hidden>
     <form id="settings-form">
-      <div class="settings-toolbar"><span id="settings-save-state" class="muted">正在加载配置…</span><div><button type="button" id="reload-settings" class="secondary">重新加载</button><button type="submit" class="primary">保存配置</button></div></div>
+      <div class="settings-toolbar"><span id="settings-save-state" class="muted">正在加载配置…</span><div><button id="owner-logout" type="button" class="secondary" hidden>退出管理</button><button type="button" id="reload-settings" class="secondary">重新加载</button><button type="submit" class="primary">保存配置</button></div></div>
       <section class="settings-panel"><div class="panel-heading"><h2>基本设置</h2><p>管理助手名称、唤醒词和默认时区。</p></div><div class="field-grid"><label>设备名称<input id="setting-name" required maxlength="120"></label><label>唤醒词<input id="setting-wake" required maxlength="48"></label><label>时区<input id="setting-timezone" required placeholder="Asia/Shanghai"></label></div></section>
       <div id="model-settings"></div>
       <section class="settings-panel">
