@@ -35,12 +35,18 @@
       <div id="model-settings"></div>
       <section class="settings-panel">
         <h2>语音识别 ASR</h2>
-        <p>语音识别服务尚未开放。指南介绍豆包语音和自建 SenseVoice 的准备步骤。</p>
+        <p id="asr-unavailable">语音识别配置在启用设备端语音后开放。</p>
+        <div id="device-asr-fields" class="field-grid" hidden>
+          <label>语音识别服务<input value="自建 SenseVoice（FunASR）" readonly></label>
+          <label>服务地址<input type="url" id="asr-endpoint" placeholder="https://识别服务地址/v1" maxlength="2000"></label>
+          <label>访问凭证（可选）<input type="password" id="asr-key" autocomplete="new-password" maxlength="8192"><small id="asr-key-configured"></small></label>
+          <label id="asr-clear-label" class="check-label" hidden><input type="checkbox" id="asr-clear">清除已保存的 ASR 凭证</label>
+        </div>
         <a href="/help.html#asr">查看语音识别指南</a>
       </section>
       <section class="settings-panel">
         <h2>语音合成 TTS</h2>
-        <p>音箱系统语音是默认方案，无需配置。播报将在音箱端接入后开放。</p>
+        <p id="tts-system-summary">音箱系统语音是默认方案，无需配置。</p>
         <a href="/help.html#tts">查看语音合成指南</a>
       </section>
       <details id="advanced-settings" class="settings-panel">
@@ -60,6 +66,9 @@
     </form>
   </section>
   <section id="usage" class="page" hidden>
+    <section class="system-card" id="voice-monitor" hidden>
+      <h2>语音链路</h2><p id="voice-state"></p><p id="voice-timing" class="muted"></p>
+    </section>
     <div class="stats overview-stats"><article><span>服务请求</span><strong id="usage-requests">0</strong><small>最近 500 条真实调用记录</small></article><article><span>输入 / 输出 Token</span><strong class="text-stat" id="usage-tokens">—</strong><small id="usage-token-note">尚无服务商返回的用量</small></article><article><span>费用与账户额度</span><strong class="text-stat">未接入账单</strong><small>自配服务请以服务商账单为准</small></article></div>
     <div class="two-column"><div class="system-card"><h2>运行状态</h2><dl><dt>服务运行时间</dt><dd id="status-uptime">—</dd><dt>程序堆内存</dt><dd id="status-memory">—</dd></dl></div><div class="system-card"><h2>用量说明</h2><p class="muted">只记录服务、模型、时间、耗时、调用结果及服务商返回的 Token 数，不保存对话原文和密钥。</p><p class="muted">没有返回 Token 的调用显示“未提供”，不会估算成零。ASR 音频时长、TTS 字数、托管套餐及余额将在相应服务接入后统计。</p><button id="open-preview" class="secondary">发起一次文字验证</button></div></div>
     <div class="section-heading"><h2>最近调用</h2><span class="muted">不含对话内容</span></div><div id="usage-history" class="usage-history"></div>

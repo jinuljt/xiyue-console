@@ -197,6 +197,16 @@ function renderManagement() {
   $('runtime-uptime').textContent = `已运行 ${formatDuration(serverStatus.uptime_seconds)}`;
   $('status-uptime').textContent = formatDuration(serverStatus.uptime_seconds);
   $('status-memory').textContent = `${(serverStatus.memory_bytes / 1024 / 1024).toFixed(1)} MiB（非进程总内存 / 整机内存）`;
+  const voice = serverStatus.voice;
+  $('voice-monitor').hidden = !voice?.available;
+  if (voice?.available) {
+    const last = voice.last_turn?.revision === config.revision ? voice.last_turn : null;
+    const stage = {configuration:'配置不完整', asr:'识别失败', model:'模型回复失败', playback:'播报失败', completed:'已播报'};
+    $('voice-state').textContent = voice.busy ? '正在处理' : last ? stage[last.stage] || last.stage : '等待语音';
+    $('voice-timing').textContent = last
+      ? '识别 ' + last.asr_ms + ' ms · 模型 ' + last.model_ms + ' ms · 播报 ' + last.playback_ms + ' ms'
+      : '';
+  }
   const step = setupStep(config);
   $('first-setup').hidden = !step;
   const service = config.mode === 'external' ? '外部助手' : '大模型';
@@ -222,6 +232,18 @@ function inputLabel(title,input) {const label=el('label',title);label.append(inp
 function fillSettings(config) {
   settingsRevision=config.revision;
   savedSettings=config;
+  const nativeVoice = Boolean(serverStatus?.voice?.available);
+  $('device-asr-fields').hidden = !nativeVoice;
+  $('asr-unavailable').hidden = nativeVoice;
+  $('tts-system-summary').textContent = nativeVoice
+    ? '语音链路使用音箱系统语音，无需额外密钥。'
+    : '音箱系统语音是默认方案，无需配置。播报在设备端语音启用后开放。';
+  $('asr-endpoint').disabled = !nativeVoice;
+  $('asr-endpoint').value = config.asr.provider === 'sensevoice' ? config.asr.endpoint : '';
+  $('asr-key').value = '';
+  $('asr-clear').checked = false;
+  $('asr-clear-label').hidden = !config.asr.key_configured;
+  $('asr-key-configured').textContent = config.asr.key_configured ? '已保存凭证，留空则保留。' : '';
   $('setting-name').value=config.name; $('setting-wake').value=config.wake_word; $('setting-timezone').value=config.timezone; $('setting-mode').value=config.mode;
   $('settings-save-state').textContent=config.updated_at ? `已保存 · ${when(config.updated_at)}` : '默认配置尚未保存';
   if (config.mode !== 'direct') $('advanced-settings').open = true;
@@ -354,6 +376,11 @@ $('settings-form').addEventListener('submit',async event=>{
     for (const name of ['asr', 'tts']) {
       const {provider, endpoint, model} = savedSettings[name];
       payload[name] = {provider, endpoint, model};
+    }
+    if (serverStatus?.voice?.available && ($('asr-endpoint').value || savedSettings.asr.provider === 'sensevoice')) {
+      payload.asr = {provider: 'sensevoice', endpoint: $('asr-endpoint').value,
+        model: savedSettings.asr.provider === 'sensevoice' ? savedSettings.asr.model || 'sensevoice' : 'sensevoice',
+        api_key: $('asr-key').value, clear_key: $('asr-clear').checked};
     }
     for(const name of ['llm', 'external'])payload[name]={provider:$(`${name}-provider`).value,endpoint:$(`${name}-endpoint`).value,model:$(`${name}-model`).value,api_key:$(`${name}-key`).value,clear_key:$(`${name}-clear`).checked};
     const config=await api('/api/settings','PUT',payload);settingsDirty=false;fillSettings(config);await refresh();toast('配置已保存');

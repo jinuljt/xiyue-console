@@ -111,7 +111,7 @@
     </section>
     <section id="asr" hidden>
       <h2>语音识别 ASR</h2>
-      <p>喜悦的语音识别适配尚未开放，准备服务后请等待对应选项上线再填写凭证。</p>
+      <p>设备端语音启用后，可填写自建 SenseVoice 的服务地址。豆包流式适配尚待接入。</p>
     </section>
     <section id="asr-doubao" hidden>
       <h2>豆包语音识别</h2>
@@ -119,11 +119,11 @@
     </section>
     <section id="asr-sensevoice" hidden>
       <h2>自建 SenseVoice</h2>
-      <p>在常开的机器上按项目文档下载并运行 SenseVoice，先用示例音频确认识别正常。喜悦将为验证过的服务部署方式补充接口地址和认证步骤。<a href="https://github.com/FunAudioLLM/SenseVoice">SenseVoice 官方运行说明</a></p>
+      <p>在常开的机器上按 FunASR 文档启动 SenseVoice HTTP 服务，先用示例音频验证。把以 <code>/v1</code> 结尾的 Base URL 填入控制台「语音识别」。喜悦会在该地址追加 <code>/audio/transcriptions</code>，使用 <code>sensevoice</code> 模型别名。启用认证时使用 HTTPS。<a href="https://funasr.com/en/docs/http-server.html">FunASR HTTP 服务部署说明</a></p>
     </section>
     <section id="tts" hidden>
       <h2>语音合成 TTS</h2>
-      <p>默认使用音箱系统语音，无需额外账号或密钥。音箱端播报接入后可试听。</p>
+      <p>默认使用音箱系统语音，无需额外账号或密钥。设备端语音启用后，语音请求的模型回复由系统服务播报。</p>
       <p>豆包语音合成将在适配完成后开放。届时请在火山引擎开通对应合成服务，按同一个接口版本获取凭证并选择音色。<a href="https://www.volcengine.com/docs/6561">豆包语音文档</a></p>
     </section>
     <section id="external" hidden>
