@@ -118,8 +118,16 @@ async function refresh() {
       $('device-login').hidden = !session.device_voice && !session.device_button;
       $('device-voice').hidden = !session.device_voice;
       $('device-button').hidden = !session.device_button;
-      $('pair-form').hidden = !session.configured;
-      $('owner-install-needed').hidden = session.configured;
+      const setup = !session.configured && session.setup_available;
+      $('pair-title').textContent = session.configured ? '登录喜悦音箱' : '设置管理员';
+      $('pair-form').hidden = !session.configured && !setup;
+      $('owner-install-needed').hidden = session.configured || setup;
+      $('pair-form').dataset.mode = setup ? 'setup' : 'login';
+      $('setup-repeat-field').hidden = !setup;
+      $('setup-repeat-password').required = setup;
+      $('owner-password').autocomplete = setup ? 'new-password' : 'current-password';
+      $('pair-submit').textContent = setup ? '保存并登录' : '登录';
+      if (!setup) $('setup-strength').hidden = true;
       if (!$('pair-dialog').open) $('pair-dialog').showModal();
       return;
     }
@@ -628,8 +636,15 @@ $('pair-form').addEventListener('submit', async event => {
   $('pair-error').textContent = '';
   try {
     const payload = {username: $('owner-name').value, password: $('owner-password').value};
-    await api('/api/session/login', 'POST', payload);
+    const setup = $('pair-form').dataset.mode === 'setup';
+    if (setup && payload.password !== $('setup-repeat-password').value) {
+      $('pair-error').textContent = '两次输入的密码不一致。';
+      return;
+    }
+    await api(setup ? '/api/session/setup' : '/api/session/login', 'POST', payload);
     $('owner-password').value = '';
+    $('setup-repeat-password').value = '';
+    $('setup-strength').hidden = true;
     stopDeviceLogin();
     await refresh();
   } catch (error) {
@@ -656,6 +671,9 @@ function updatePasswordStrength(input, meter) {
     weak: '弱 · 建议换一个更难猜的密码', medium: '中', strong: '强'
   }[level];
 }
+$('owner-password').addEventListener('input', event => {
+  if ($('pair-form').dataset.mode === 'setup') updatePasswordStrength(event.target, $('setup-strength'));
+});
 $('new-owner-password').addEventListener('input', event => updatePasswordStrength(event.target, $('password-strength')));
 $('owner-change').addEventListener('click', () => {
   $('owner-change-form').reset();

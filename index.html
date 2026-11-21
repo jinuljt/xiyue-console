@@ -103,15 +103,16 @@
 <dialog id="config-dialog"><form id="config-form"><div class="dialog-heading"><h2 id="config-title">能力配置</h2><button type="button" data-close aria-label="关闭">×</button></div><p id="config-description" class="muted"></p><label class="check-label"><input id="config-enabled" type="checkbox">启用此能力（现有任务不受停用影响）</label><div id="config-fields"></div><p class="form-error" role="alert"></p><button class="primary" type="submit">保存配置</button></form></dialog>
 <dialog id="preview-dialog"><form id="preview-form"><div class="dialog-heading"><h2>验证已保存的服务</h2><button type="button" data-close aria-label="关闭">×</button></div><p class="muted">此操作会向已保存的服务发送文字，可能产生服务商费用。</p><p id="preview-hybrid" class="muted" hidden>普通问题发给大模型。可输入「交给外部助手：概括当前工作区」验证连接器。</p><label>验证文字<input id="preview-message" required maxlength="16000" placeholder="输入一句想询问的话"></label><p id="preview-result" class="task-text"></p><p class="form-error" role="alert"></p><button type="submit" class="primary">发送验证</button></form></dialog>
 <dialog id="pair-dialog" aria-labelledby="pair-title">
+  <h2 id="pair-title">登录喜悦音箱</h2>
   <form id="pair-form">
-    <h2 id="pair-title">登录喜悦音箱</h2>
-
     <label>管理员用户名<input id="owner-name" autocomplete="username" required maxlength="64"></label>
     <label>管理员密码<input id="owner-password" type="password" autocomplete="current-password" required maxlength="256"></label>
+    <p id="setup-strength" class="password-strength" role="status" hidden><span class="strength-bar" aria-hidden="true"></span><span class="strength-label"></span></p>
+    <label id="setup-repeat-field" hidden>确认密码<input id="setup-repeat-password" type="password" autocomplete="new-password" maxlength="256"></label>
     <p role="alert" id="pair-error"></p>
     <button type="submit" id="pair-submit" class="primary">登录</button>
   </form>
-  <p id="owner-install-needed" hidden>请在喜悦安装向导中设置管理员，再回到这里登录。</p>
+  <p id="owner-install-needed" hidden>请在与音箱同一局域网下打开此地址，完成首次设置。</p>
   <section id="device-login" hidden aria-labelledby="device-login-title">
     <h3 id="device-login-title">音箱确认登录</h3>
     <p>忘记密码时，用音箱确认登录，再设置新密码。</p>
