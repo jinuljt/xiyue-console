@@ -566,14 +566,15 @@ $('setup-action').addEventListener('click', () => {
     if (step === 'configure_tts') setTimeout(() => $('tts-provider').focus(), 0);
   }
 });
+function serviceFormValues(name) {
+  return {provider:$(`${name}-provider`).value, endpoint:$(`${name}-endpoint`).value,
+    model:$(`${name}-model`).value, api_key:$(`${name}-key`).value,
+    clear_key:$(`${name}-clear`).checked};
+}
 async function verifySettings(service, output) {
-  if (settingsDirty) {
-    output.textContent = '请先保存当前配置。';
-    return;
-  }
   output.textContent = '正在验证…';
   try {
-    const result = await api('/api/settings/verify', 'POST', {service});
+    const result = await api('/api/settings/verify', 'POST', {service, config:serviceFormValues(service)});
     output.textContent = `验证成功 · ${result.duration_ms} ms`;
   } catch (error) {
     output.textContent = '验证失败 · ' + error.message;
@@ -596,7 +597,7 @@ $('settings-form').addEventListener('submit',async event=>{
     const cloudTTS = $('tts-provider').value === 'doubao';
     payload.tts = {provider: $('tts-provider').value, endpoint: '', model: cloudTTS ? $('tts-voice').value : '',
       api_key: cloudTTS ? $('tts-key').value : '', clear_key: $('tts-clear').checked};
-    for(const name of ['llm', 'external'])payload[name]={provider:$(`${name}-provider`).value,endpoint:$(`${name}-endpoint`).value,model:$(`${name}-model`).value,api_key:$(`${name}-key`).value,clear_key:$(`${name}-clear`).checked};
+    for (const name of ['llm', 'external']) payload[name] = serviceFormValues(name);
     const config=await api('/api/settings','PUT',payload);settingsDirty=false;fillSettings(config);await refresh();toast('配置已保存');
   }catch(e){$('settings-error').textContent=e.message;}finally{b.disabled=false;}
 });
