@@ -22,3 +22,9 @@
 #external-task-message{display:block;width:100%;resize:vertical;font:inherit;padding:9px;border:1px solid var(--line);border-radius:6px}
 .connector-result{white-space:pre-wrap;overflow-wrap:anywhere;color:var(--ink)}
 #pair-error:empty,#external-task-error:empty{display:none}
+
+.password-strength{display:flex;align-items:center;gap:9px;font-size:.85em;margin:4px 0 14px}
+.password-strength[hidden]{display:none}.strength-bar{width:72px;height:5px;border-radius:4px}
+.password-strength[data-level=weak]{color:#9a302b}.password-strength[data-level=weak] .strength-bar{background:linear-gradient(to right,#b94038 33%,#dfe5df 33%)}
+.password-strength[data-level=medium]{color:#805715}.password-strength[data-level=medium] .strength-bar{background:linear-gradient(to right,#b98121 66%,#dfe5df 66%)}
+.password-strength[data-level=strong]{color:#235e40}.password-strength[data-level=strong] .strength-bar{background:#337f55}

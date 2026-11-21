@@ -128,8 +128,9 @@
   <form id="owner-change-form">
     <div class="dialog-heading"><h2 id="owner-change-title">修改管理员密码</h2><button type="button" data-close aria-label="关闭">×</button></div>
     <p>设置成功后，当前页面保持登录，之前的会话失效。</p>
-    <label>新密码<input id="new-owner-password" type="password" autocomplete="new-password" required minlength="12" maxlength="256"></label>
-    <label>确认新密码<input id="repeat-owner-password" type="password" autocomplete="new-password" required minlength="12" maxlength="256"></label>
+    <label>新密码<input id="new-owner-password" type="password" autocomplete="new-password" required maxlength="256"></label>
+    <p id="password-strength" class="password-strength" role="status" hidden><span class="strength-bar" aria-hidden="true"></span><span class="strength-label"></span></p>
+    <label>确认新密码<input id="repeat-owner-password" type="password" autocomplete="new-password" required maxlength="256"></label>
     <p id="owner-change-error" role="alert"></p>
     <button type="submit" class="primary">保存新密码</button>
   </form>

@@ -638,8 +638,28 @@ $('pair-form').addEventListener('submit', async event => {
     submit.disabled = false;
   }
 });
+
+function updatePasswordStrength(input, meter) {
+  const password = input.value;
+  meter.hidden = password === '';
+  if (meter.hidden) return;
+  const length = [...password].length;
+  const variety = new Set(password).size;
+  const groups = [/[a-z]/, /[A-Z]/, /\d/, /[^a-zA-Z\d\s]/].filter(test => test.test(password)).length;
+  const common = /^(?:password|qwerty|admin|abc123|123456)(?:\d|!)*$/i.test(password);
+  let level = 'weak';
+  if (!common && length >= 8 && variety >= 5) {
+    level = length >= 12 && variety >= 8 && (groups >= 3 || length >= 16) ? 'strong' : 'medium';
+  }
+  meter.dataset.level = level;
+  meter.querySelector('.strength-label').textContent = {
+    weak: '弱 · 建议换一个更难猜的密码', medium: '中', strong: '强'
+  }[level];
+}
+$('new-owner-password').addEventListener('input', event => updatePasswordStrength(event.target, $('password-strength')));
 $('owner-change').addEventListener('click', () => {
   $('owner-change-form').reset();
+  updatePasswordStrength($('new-owner-password'), $('password-strength'));
   $('owner-change-error').textContent = '';
   $('owner-change-dialog').showModal();
 });
