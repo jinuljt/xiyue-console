@@ -41,11 +41,11 @@
   <section id="system" class="page" hidden>
     <form id="settings-form">
       <div class="settings-toolbar"><span id="settings-save-state" class="muted">正在加载配置…</span><div><button id="owner-logout" type="button" class="secondary" hidden>退出管理</button><button type="button" id="reload-settings" class="secondary">重新加载</button><button type="submit" class="primary">保存配置</button></div></div>
-      <section class="settings-panel"><div class="panel-heading"><h2>基本设置</h2><p>管理助手名称、唤醒词和默认时区。</p></div><div class="field-grid"><label>设备名称<input id="setting-name" required maxlength="120"></label><label>唤醒词<input id="setting-wake" required maxlength="48"></label><label>时区<input id="setting-timezone" required placeholder="Asia/Shanghai"></label></div></section>
+      <section class="settings-panel"><div class="panel-heading"><h2>基本设置</h2><p>查看音箱型号，设置唤醒词和计划时区。</p></div><div class="field-grid"><div><span>音箱型号</span><p id="setting-device">型号待确认</p></div><label>唤醒词<input id="setting-wake" required maxlength="48"></label><div><label>计划时区<select id="setting-timezone" required></select></label><label>筛选时区<input id="timezone-search" type="search" autocomplete="off" placeholder="输入城市或时区"></label><small>新建的定时计划按此时区运行。</small></div></div></section>
       <div id="model-settings"></div>
       <section class="settings-panel">
         <h2>语音识别 ASR</h2>
-        <p id="asr-unavailable">语音识别配置在启用设备端语音后开放。</p>
+        <p id="asr-unavailable"></p>
         <div id="device-asr-fields" class="field-grid" hidden>
           <label>语音识别服务<select id="asr-provider"><option value="doubao">豆包语音（云端）</option><option value="sensevoice">自建 SenseVoice（FunASR）</option></select></label>
           <label id="asr-endpoint-field">服务地址<input type="url" id="asr-endpoint" placeholder="https://识别服务地址/v1" maxlength="2000"></label>
@@ -58,7 +58,7 @@
       </section>
       <section class="settings-panel">
         <h2>语音合成 TTS</h2>
-        <p id="tts-system-summary">音箱系统语音是默认方案，无需配置。</p>
+        <p id="tts-system-summary"></p>
         <div id="device-tts-fields" class="field-grid" hidden>
           <label>语音合成服务<select id="tts-provider"><option value="system">音箱系统语音（推荐）</option><option value="doubao">豆包语音合成</option></select></label>
           <label id="tts-voice-field">豆包音色 ID<input id="tts-voice" maxlength="200"></label>
@@ -94,14 +94,13 @@
       <h2>语音链路</h2><p id="voice-state"></p><p id="voice-timing" class="muted"></p>
     </section>
     <div class="stats overview-stats"><article><span>服务请求</span><strong id="usage-requests">0</strong><small>最近 500 条真实调用记录</small></article><article><span>输入 / 输出 Token</span><strong class="text-stat" id="usage-tokens">—</strong><small id="usage-token-note">尚无服务商返回的用量</small></article><article><span>费用与账户额度</span><strong class="text-stat">未接入账单</strong><small>自配服务请以服务商账单为准</small></article></div>
-    <div class="two-column"><div class="system-card"><h2>运行状态</h2><dl><dt>服务运行时间</dt><dd id="status-uptime">—</dd><dt>程序堆内存</dt><dd id="status-memory">—</dd></dl><dl id="service-status"></dl></div><div class="system-card"><h2>用量说明</h2><p class="muted">只记录服务、模型、时间、耗时、调用结果及服务商返回的 Token 数，不保存对话原文和密钥。</p><p class="muted">没有返回 Token 的调用显示“未提供”，不会估算成零。ASR 音频时长、TTS 字数、托管套餐及余额将在相应服务接入后统计。</p><button id="open-preview" class="secondary">发起一次文字验证</button></div></div>
+    <div class="two-column"><div class="system-card"><h2>运行状态</h2><dl><dt>服务运行时间</dt><dd id="status-uptime">—</dd><dt>程序堆内存</dt><dd id="status-memory">—</dd></dl><dl id="service-status"></dl></div><div class="system-card"><h2>用量说明</h2><p class="muted">只记录服务、模型、时间、耗时、调用结果及服务商返回的 Token 数，不保存对话原文和密钥。</p><p class="muted">没有返回 Token 的调用显示“未提供”，不会估算成零。ASR 音频时长、TTS 字数、托管套餐及余额将在相应服务接入后统计。</p><button id="open-preview" class="secondary">验证</button></div></div>
     <div class="section-heading"><h2>最近调用</h2><span class="muted">不含对话内容</span></div><div id="usage-history" class="usage-history"></div>
   </section>
   <footer>喜悦 · 把生活的小事，认真接住。</footer>
 </main>
 <dialog id="task-dialog"><form id="task-form"><div class="dialog-heading"><h2>创建任务</h2><button type="button" data-close aria-label="关闭">×</button></div><label>使用什么能力？<select id="task-ability" required></select></label><div id="task-fields"></div><label>什么时候执行？<select id="task-when"><option value="now">现在</option><option value="once">指定时间，一次</option><option value="daily">每天</option><option value="weekdays">每个工作日</option></select></label><label id="date-label" hidden>首次执行时间<input id="task-date" type="datetime-local"></label><p class="muted" id="timezone-note"></p><p class="form-error" role="alert"></p><button class="primary" type="submit">创建</button></form></dialog>
 <dialog id="config-dialog"><form id="config-form"><div class="dialog-heading"><h2 id="config-title">能力配置</h2><button type="button" data-close aria-label="关闭">×</button></div><p id="config-description" class="muted"></p><label class="check-label"><input id="config-enabled" type="checkbox">启用此能力（现有任务不受停用影响）</label><div id="config-fields"></div><p class="form-error" role="alert"></p><button class="primary" type="submit">保存配置</button></form></dialog>
-<dialog id="preview-dialog"><form id="preview-form"><div class="dialog-heading"><h2>验证已保存的服务</h2><button type="button" data-close aria-label="关闭">×</button></div><p class="muted">此操作会向已保存的服务发送文字，可能产生服务商费用。</p><p id="preview-hybrid" class="muted" hidden>普通问题发给大模型。可输入「交给外部助手：概括当前工作区」验证连接器。</p><label>验证文字<input id="preview-message" required maxlength="16000" placeholder="输入一句想询问的话"></label><p id="preview-result" class="task-text"></p><p class="form-error" role="alert"></p><button type="submit" class="primary">发送验证</button></form></dialog>
 <dialog id="pair-dialog" aria-labelledby="pair-title">
   <h2 id="pair-title">登录喜悦音箱</h2>
   <form id="pair-form">

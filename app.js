@@ -23,7 +23,7 @@ function el(tag, text, className) {const e = document.createElement(tag); if (te
 function button(text, handler, cls = '') {const b = el('button', text, cls); b.type = 'button'; b.addEventListener('click', () => handle(handler, b)); return b;}
 function toast(text) {$('toast').textContent = text; $('toast').hidden = false; clearTimeout(toast.timer); toast.timer = setTimeout(() => {$('toast').hidden = true;}, 4500);}
 async function api(path, method = 'GET', body) {
-  const response = await fetch(path, {method, headers: {'Content-Type': 'application/json', 'X-Xiyue-Request': 'console'}, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(path === "/api/preview/chat" ? 50000 : 10000)});
+  const response = await fetch(path, {method, headers: {'Content-Type': 'application/json', 'X-Xiyue-Request': 'console'}, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(path === '/api/settings/verify' ? 50000 : 10000)});
   if (!response.ok) {let message = '操作失败，请重试'; try {message = (await response.json()).error || message;} catch {} throw new Error(message);}
   return response.json();
 }
@@ -36,7 +36,9 @@ function page(name) {
   if (name === 'tasks' && state.settings) handle(loadExternalTasks);
   $('new-task').hidden = !['tasks', 'schedules'].includes(name);
 }
-function when(iso) {return new Date(iso).toLocaleString('zh-CN', {month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});}
+function when(iso, timeZone = state.settings?.timezone) {
+  return new Date(iso).toLocaleString('zh-CN', {timeZone,month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
+}
 function active(t) {return !['done', 'cancelled'].includes(t.status);}
 function taskCard(task) {
   const card = el('article', undefined, 'task-card');
@@ -80,7 +82,7 @@ function renderSchedules() {
     const top = el('div', undefined, 'card-top'); const waitingRetry = sc.enabled && sc.repeat === 'once' && sc.failure;
     const label = waitingRetry ? '执行失败' : sc.enabled ? '已启用' : '任务已创建';
     top.append(el('h3', state.abilities[sc.ability_id]?.manifest.name || sc.ability_id), el('span', label, 'badge'));
-    card.append(top, el('p', `${when(sc.next_at)} · ${{once:'一次',daily:'每天',weekdays:'工作日'}[sc.repeat]} · ${sc.timezone}`, 'muted'));
+    card.append(top, el('p', `${when(sc.next_at, sc.timezone)} · ${{once:'一次',daily:'每天',weekdays:'工作日'}[sc.repeat]} · ${sc.timezone}`, 'muted'));
     if (sc.inputs.content) card.append(el('p', sc.inputs.content, 'task-text'));
     if (sc.failure) card.append(el('p', sc.failure, 'form-error'));
     if (waitingRetry) card.append(button('重试一次', async () => {
@@ -173,12 +175,16 @@ function openTask(abilityID = 'todo', schedule = false) {
   if (choices.some(a => a.manifest.id === abilityID)) $('task-ability').value = abilityID;
   $('task-form').querySelector('.form-error').textContent = '';
   $('task-when').value = schedule ? 'once' : 'now'; updateWhen();
-  const next = new Date(Date.now() + 3600000); next.setSeconds(0,0);
-  $('task-date').value = `${next.getFullYear()}-${String(next.getMonth()+1).padStart(2,'0')}-${String(next.getDate()).padStart(2,'0')}T${String(next.getHours()).padStart(2,'0')}:${String(next.getMinutes()).padStart(2,'0')}`;
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: state.settings.timezone, year:'numeric', month:'2-digit', day:'2-digit',
+    hour:'2-digit', minute:'2-digit', hourCycle:'h23'
+  }).formatToParts(new Date(Date.now() + 3600000));
+  const time = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  $('task-date').value = `${time.year}-${time.month}-${time.day}T${time.hour}:${time.minute}`;
   fieldsFor(state.abilities[$('task-ability').value], $('task-fields'), 'task');
   $('task-dialog').showModal();
 }
-function updateWhen() {const scheduled = $('task-when').value !== 'now'; $('date-label').hidden = !scheduled; $('task-date').required = scheduled; $('timezone-note').textContent = scheduled ? `使用时区：${Intl.DateTimeFormat().resolvedOptions().timeZone}` : '';}
+function updateWhen() {const scheduled = $('task-when').value !== 'now'; $('date-label').hidden = !scheduled; $('task-date').required = scheduled; $('timezone-note').textContent = scheduled ? `使用时区：${state.settings.timezone}` : '';}
 function openConfig(id) {
   editingAbility = id; const a = state.abilities[id];
   $('config-title').textContent = a.manifest.name; $('config-description').textContent = a.manifest.description;
@@ -194,7 +200,7 @@ async function submitForm(event, fn) {
 $('task-form').addEventListener('submit', e => submitForm(e, async () => {
   const body = {ability_id: $('task-ability').value, inputs: fieldValues($('task-fields'))};
   if ($('task-when').value === 'now') await api('/api/tasks', 'POST', body);
-  else {body.next_at = new Date($('task-date').value).toISOString(); body.repeat = $('task-when').value; body.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone; await api('/api/schedules', 'POST', body);}
+  else {body.local_time = $('task-date').value; body.repeat = $('task-when').value; await api('/api/schedules', 'POST', body);}
 }));
 $('config-form').addEventListener('submit', e => submitForm(e, () => api(`/api/abilities/${editingAbility}`, 'PUT', {enabled: $('config-enabled').checked, config: fieldValues($('config-fields')), secrets: Object.fromEntries([...$('config-fields').querySelectorAll('input[data-kind=secret]')].filter(i => i.value).map(i => [i.name,i.value])), clear_secrets: [...$('config-fields').querySelectorAll('input[data-clear-secret]:checked')].map(i=>i.dataset.clearSecret)})));
 $('task-ability').addEventListener('change', () => fieldsFor(state.abilities[$('task-ability').value], $('task-fields'), 'task'));
@@ -236,7 +242,11 @@ function setupStep(config) {
 }
 function renderManagement() {
   const config = state.settings; if (!config) return;
-  $('device-name').textContent = config.name;
+  const device = serverStatus.device;
+  $('device-name').textContent = device?.name || device?.model || '喜悦音箱';
+  $('setting-device').textContent = [device?.name, device?.model, device?.firmware].filter(Boolean).join(' · ') || '型号待确认';
+  $('asr-unavailable').textContent = serverStatus.voice?.available ? '' : '语音链路待接通，可以先保存识别配置。';
+  $('tts-system-summary').textContent = serverStatus.voice?.available ? '' : '语音链路待接通，可以先选择并保存播报方式。';
   $('runtime-version').textContent = `版本 ${serverStatus.version}`;
   $('runtime-state').textContent = '运行中';
   $('runtime-uptime').textContent = `已运行 ${formatDuration(serverStatus.uptime_seconds)}`;
@@ -259,7 +269,7 @@ function renderManagement() {
   $('first-setup').hidden = !step;
   const service = config.mode === 'external' ? '外部助手' : '大模型';
   const instructions = {
-    verify: '已保存配置。发送一条文字，确认' + service + '能正常回复。',
+    verify: '已保存配置。点击验证，确认' + service + '能正常回复。',
     verify_device: '对音箱喊「' + config.wake_word + '」并说一句话。成功播报后引导会收起。',
     configure_asr: '选择豆包语音或自建 SenseVoice，再用音箱完成首次语音验证。',
     configure_tts: '补全语音合成配置，或选用音箱系统语音。',
@@ -284,15 +294,14 @@ function renderUsage(records) {
 }
 function inputLabel(title,input) {const label=el('label',title);label.append(input);return label;}
 function updateASRFields() {
-  const active = Boolean(serverStatus?.voice?.available);
   const cloud = $('asr-provider').value === 'doubao';
   $('asr-endpoint-field').hidden = cloud;
-  $('asr-endpoint').disabled = !active || cloud;
+  $('asr-endpoint').disabled = cloud;
   $('asr-resource-field').hidden = !cloud;
-  $('asr-resource').disabled = !active || !cloud;
+  $('asr-resource').disabled = !cloud;
   $('asr-key-title').textContent = cloud ? '豆包语音 API Key' : '访问凭证（可选）';
-  $('asr-cloud-note').hidden = !active || !cloud;
-  $('asr-guide').href = '/help.html#' + (active ? (cloud ? 'asr-doubao' : 'asr-sensevoice') : 'asr');
+  $('asr-cloud-note').hidden = !cloud;
+  $('asr-guide').href = '/help.html#' + (cloud ? 'asr-doubao' : 'asr-sensevoice');
 }
 $('asr-provider').addEventListener('change', updateASRFields);
 function updateTTSFields() {
@@ -304,25 +313,30 @@ function updateTTSFields() {
   if (cloud && !$('tts-voice').value) $('tts-voice').value = providerOptions.tts.find(item => item.id === 'doubao')?.model || '';
 }
 $('tts-provider').addEventListener('change', updateTTSFields);
+const timezoneLabels = {'Asia/Shanghai':'中国 · 北京、上海','Asia/Hong_Kong':'香港','Asia/Taipei':'台北',
+  'Asia/Tokyo':'东京','Asia/Singapore':'新加坡','Europe/London':'伦敦','America/New_York':'纽约',
+  'America/Los_Angeles':'洛杉矶','UTC':'协调世界时'};
+function renderTimezoneOptions(selected, query = '') {
+  const control = $('setting-timezone');
+  const zones = new Set([...Object.keys(timezoneLabels), ...(Intl.supportedValuesOf?.('timeZone') || []),
+    savedSettings.timezone, selected].filter(Boolean));
+  query = query.trim().toLowerCase();
+  const matches = [...zones].filter(zone => zone === selected || (zone + ' ' + (timezoneLabels[zone] || '')).toLowerCase().includes(query));
+  control.replaceChildren(...matches.map(zone => new Option(timezoneLabels[zone] ? `${timezoneLabels[zone]} · ${zone}` : zone, zone)));
+  control.value = selected;
+}
+$('timezone-search').addEventListener('input', event => renderTimezoneOptions($('setting-timezone').value, event.target.value));
 function fillSettings(config) {
   settingsRevision=config.revision;
   savedSettings=config;
-  const nativeVoice = Boolean(serverStatus?.voice?.available);
-  $('device-asr-fields').hidden = !nativeVoice;
-  $('asr-unavailable').hidden = nativeVoice;
-  $('tts-system-summary').textContent = '音箱系统语音是默认方案，无需配置。';
-  $('device-tts-fields').hidden = !nativeVoice;
+  $('device-asr-fields').hidden = false;
+  $('device-tts-fields').hidden = false;
   $('tts-provider').value = config.tts.provider === 'doubao' ? 'doubao' : 'system';
-  $('tts-provider').querySelector('option[value="doubao"]').disabled = !serverStatus?.voice?.cloud_tts_available;
   $('tts-voice').value = config.tts.provider === 'doubao' ? config.tts.model : '';
   $('tts-key').value = '';
   $('tts-clear').checked = false;
   $('tts-key-configured').textContent = config.tts.key_configured ? '已保存，留空则保留。' : '';
   updateTTSFields();
-  if (config.tts.provider === 'doubao' && !serverStatus?.voice?.cloud_tts_available) {
-    $('tts-system-summary').textContent = '当前设备没有可用的 PCM 播放器。请选用音箱系统语音。';
-  }
-  $('tts-cloud-note').hidden = !nativeVoice || $('tts-provider').value !== 'doubao';
   $('asr-provider').value = config.asr.provider === 'sensevoice' ? 'sensevoice' : 'doubao';
   $('asr-endpoint').value = config.asr.provider === 'sensevoice' ? config.asr.endpoint : '';
   const cloudPreset = providerOptions.asr.find(item => item.id === 'doubao');
@@ -337,7 +351,10 @@ function fillSettings(config) {
   $('asr-clear').checked = false;
   $('asr-clear-label').hidden = !config.asr.key_configured;
   $('asr-key-configured').textContent = config.asr.key_configured ? '已保存凭证，留空则保留。' : '';
-  $('setting-name').value=config.name; $('setting-wake').value=config.wake_word; $('setting-timezone').value=config.timezone; $('setting-mode').value=config.mode;
+  $('setting-wake').value = config.wake_word;
+  $('timezone-search').value = '';
+  renderTimezoneOptions(config.timezone);
+  $('setting-mode').value = config.mode;
   $('settings-save-state').textContent=config.updated_at ? `已保存 · ${when(config.updated_at)}` : '默认配置尚未保存';
   if (config.mode !== 'direct') $('advanced-settings').open = true;
   for (const name of ['llm', 'external']) {
@@ -429,11 +446,13 @@ function fillSettings(config) {
     }
     grid.append(inputLabel(isModel ? '服务地址（Base URL）' : '连接器调用地址', endpoint),
       inputLabel(isModel ? 'API Key' : '连接器凭证', key));
-    const verify = button('发送文字验证', openPreview, 'secondary');
-    verify.dataset.verifyMode = isModel ? 'direct' : 'external';
-    panel.append(grid, clearLabel);
-    if (isModel) panel.append(note, help);
-    panel.append(verify);
+    const result = el('p', '', 'muted');
+    result.setAttribute('role', 'status');
+    const verify = button('验证', () => verifySettings(name, result), 'secondary');
+    const actions = el('div', undefined, 'service-actions');
+    if (isModel) actions.append(help);
+    actions.append(verify);
+    panel.append(grid, clearLabel, note, actions, result);
     $(isModel ? 'model-settings' : 'external-settings').replaceChildren(panel);
     update();
   }
@@ -441,9 +460,6 @@ function fillSettings(config) {
 }
 function updateModeActions() {
   const mode = $('setting-mode').value;
-  document.querySelectorAll('[data-verify-mode]').forEach(control => {
-    control.hidden = mode !== control.dataset.verifyMode;
-  });
   const external = $('external-settings');
   external.hidden = mode === 'direct';
   $('external-endpoint').disabled = external.hidden;
@@ -451,49 +467,46 @@ function updateModeActions() {
 $('setting-mode').addEventListener('change', updateModeActions);
 $('setup-action').addEventListener('click', () => {
   const step = setupStep(state.settings);
-  if (step === 'verify') openPreview();
+  if (step === 'verify') location.hash = 'system';
   else {
     location.hash = 'system';
     if (step === 'configure_asr') setTimeout(() => $('asr-provider').focus(), 0);
     if (step === 'configure_tts') setTimeout(() => $('tts-provider').focus(), 0);
   }
 });
-function openPreview() {
-  if(settingsDirty){toast('请先保存当前配置，再进行验证');return;}
-  $('preview-hybrid').hidden = state.settings?.mode !== 'hybrid';
-  $('preview-form').querySelector('.form-error').textContent='';$('preview-result').textContent='';$('preview-dialog').showModal();
+async function verifySettings(service, output) {
+  if (settingsDirty) {
+    output.textContent = '请先保存当前配置。';
+    return;
+  }
+  output.textContent = '正在验证…';
+  try {
+    const result = await api('/api/settings/verify', 'POST', {service});
+    output.textContent = `验证成功 · ${result.duration_ms} ms`;
+  } catch (error) {
+    output.textContent = '验证失败 · ' + error.message;
+  }
+  await refresh();
 }
-$('open-preview').addEventListener('click',openPreview);
-$('settings-form').addEventListener('input',()=>{settingsDirty=true;$('settings-save-state').textContent='有未保存的修改';});
-$('settings-form').addEventListener('change',()=>{settingsDirty=true;$('settings-save-state').textContent='有未保存的修改';});
+$('open-preview').addEventListener('click', () => { location.hash = 'system'; });
+$('settings-form').addEventListener('input',event=>{if(event.target.id==='timezone-search')return;settingsDirty=true;$('settings-save-state').textContent='有未保存的修改';});
+$('settings-form').addEventListener('change',event=>{if(event.target.id==='timezone-search')return;settingsDirty=true;$('settings-save-state').textContent='有未保存的修改';});
 $('reload-settings').addEventListener('click',()=>handle(async()=>{const config=await api('/api/settings');settingsDirty=false;fillSettings(config);$('settings-error').textContent='';}));
 $('settings-form').addEventListener('submit',async event=>{
   event.preventDefault();const b=event.currentTarget.querySelector('[type=submit]');b.disabled=true;$('settings-error').textContent='';
   try{
-    const payload={revision:settingsRevision,name:$('setting-name').value,wake_word:$('setting-wake').value,timezone:$('setting-timezone').value,mode:$('setting-mode').value};
-    for (const name of ['asr', 'tts']) {
-      const {provider, endpoint, model} = savedSettings[name];
-      payload[name] = {provider, endpoint, model};
-    }
-    if (serverStatus?.voice?.available) {
-      const provider = $('asr-provider').value;
-      payload.asr = {provider, endpoint: provider === 'sensevoice' ? $('asr-endpoint').value : '',
-        model: provider === 'doubao' ? $('asr-resource').value :
-          (savedSettings.asr.provider === 'sensevoice' && savedSettings.asr.model) || 'sensevoice',
-        api_key: $('asr-key').value, clear_key: $('asr-clear').checked};
-      const cloudTTS = $('tts-provider').value === 'doubao';
-      payload.tts = {provider: $('tts-provider').value, endpoint: '', model: cloudTTS ? $('tts-voice').value : '',
-        api_key: cloudTTS ? $('tts-key').value : '', clear_key: $('tts-clear').checked};
-    }
+    const payload={revision:settingsRevision,name:savedSettings.name,wake_word:$('setting-wake').value,timezone:$('setting-timezone').value,mode:$('setting-mode').value};
+    const provider = $('asr-provider').value;
+    payload.asr = {provider, endpoint: provider === 'sensevoice' ? $('asr-endpoint').value : '',
+      model: provider === 'doubao' ? $('asr-resource').value :
+        (savedSettings.asr.provider === 'sensevoice' && savedSettings.asr.model) || 'sensevoice',
+      api_key: $('asr-key').value, clear_key: $('asr-clear').checked};
+    const cloudTTS = $('tts-provider').value === 'doubao';
+    payload.tts = {provider: $('tts-provider').value, endpoint: '', model: cloudTTS ? $('tts-voice').value : '',
+      api_key: cloudTTS ? $('tts-key').value : '', clear_key: $('tts-clear').checked};
     for(const name of ['llm', 'external'])payload[name]={provider:$(`${name}-provider`).value,endpoint:$(`${name}-endpoint`).value,model:$(`${name}-model`).value,api_key:$(`${name}-key`).value,clear_key:$(`${name}-clear`).checked};
     const config=await api('/api/settings','PUT',payload);settingsDirty=false;fillSettings(config);await refresh();toast('配置已保存');
   }catch(e){$('settings-error').textContent=e.message;}finally{b.disabled=false;}
-});
-$('preview-form').addEventListener('submit',async event=>{
-  event.preventDefault();const b=event.currentTarget.querySelector('[type=submit]');b.disabled=true;$('preview-result').textContent='正在调用已保存的服务…';event.currentTarget.querySelector('.form-error').textContent='';
-  try{const result=await api('/api/preview/chat','POST',{message:$('preview-message').value});$('preview-result').textContent=result.reply;}
-  catch(e){$('preview-result').textContent='';$('preview-form').querySelector('.form-error').textContent=e.message;}
-  finally{b.disabled=false;await refresh();}
 });
 let externalTaskRevision;
 let selectedExternalTask;
