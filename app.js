@@ -2,7 +2,7 @@
 const $ = (id) => document.getElementById(id);
 let state = {abilities: {}, tasks: [], schedules: [], events: []};
 let editingAbility = null;
-let refreshBusy = false;
+let refreshActive;
 let lastSnapshot = '';
 let providerOptions = null;
 let settingsDirty = false;
@@ -108,8 +108,12 @@ function renderEvents() {
   }) : [empty('任务开始后，喜悦的提示会出现在这里。')]));
 }
 function updateCountdowns() {document.querySelectorAll('[data-due]').forEach(e => {const remaining = Math.max(0, Math.ceil((new Date(e.dataset.due) - Date.now()) / 1000)); e.textContent = remaining ? `剩余 ${Math.floor(remaining / 60)} 分 ${remaining % 60} 秒` : '计时到期，正在更新…';});}
-async function refresh() {
-  if (refreshBusy) return; refreshBusy = true;
+function refresh(afterLogin = false) {
+  if (refreshActive) return afterLogin ? refreshActive.then(() => refresh()) : refreshActive;
+  refreshActive = refreshConsole().finally(() => { refreshActive = null; });
+  return refreshActive;
+}
+async function refreshConsole() {
   try {
     const session = await api('/api/session');
     const paired = session.authenticated;
@@ -149,7 +153,6 @@ async function refresh() {
     $('status-uptime').textContent = '—';
     $('status-memory').textContent = '—';
   }
-  finally {refreshBusy = false;}
 }
 function fieldsFor(ability, container, mode) {
   container.replaceChildren();
@@ -702,7 +705,7 @@ async function pollDeviceLogin(attempt) {
     if (deviceLoginAttempt !== attempt) return;
     if (result.authenticated) {
       stopDeviceLogin();
-      await refresh();
+      await refresh(true);
     } else {
       attempt.timer = setTimeout(() => pollDeviceLogin(attempt), 1000);
     }
@@ -747,6 +750,8 @@ $('pair-form').addEventListener('submit', async event => {
   event.preventDefault();
   const submit = event.submitter;
   submit.disabled = true;
+  const label = submit.textContent;
+  submit.textContent = '正在登录…';
   $('pair-error').textContent = '';
   try {
     const payload = {username: $('owner-name').value, password: $('owner-password').value};
@@ -760,11 +765,12 @@ $('pair-form').addEventListener('submit', async event => {
     $('setup-repeat-password').value = '';
     $('setup-strength').hidden = true;
     stopDeviceLogin();
-    await refresh();
+    await refresh(true);
   } catch (error) {
     $('pair-error').textContent = error.message;
   } finally {
     submit.disabled = false;
+    if ($('pair-dialog').open) submit.textContent = label;
   }
 });
 
