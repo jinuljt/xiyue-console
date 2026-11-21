@@ -41,7 +41,15 @@
   <section id="system" class="page" hidden>
     <form id="settings-form">
       <div class="settings-toolbar"><span id="settings-save-state" class="muted">正在加载配置…</span><div><button id="owner-logout" type="button" class="secondary" hidden>退出管理</button><button type="button" id="reload-settings" class="secondary">重新加载</button><button type="submit" class="primary">保存配置</button></div></div>
-      <section class="settings-panel"><div class="panel-heading"><h2>基本设置</h2><p>查看音箱型号，设置唤醒词和计划时区。</p></div><div class="field-grid"><div><span>音箱型号</span><p id="setting-device">型号待确认</p></div><label>唤醒词<input id="setting-wake" required maxlength="48"></label><div><label>计划时区<select id="setting-timezone" required></select></label><label>筛选时区<input id="timezone-search" type="search" autocomplete="off" placeholder="输入城市或时区"></label><small>新建的定时计划按此时区运行。</small></div></div></section>
+      <section class="settings-panel"><div class="panel-heading"><h2>基本设置</h2><p>查看音箱型号，设置唤醒词和计划时区。</p></div><div class="field-grid"><div><span>音箱型号</span><p id="setting-device">型号待确认</p></div><label>唤醒词<input id="setting-wake" required maxlength="48"></label><div class="timezone-picker">
+        <label for="setting-timezone">计划时区</label>
+        <div class="timezone-control">
+          <input id="setting-timezone" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="timezone-list" autocomplete="off" autocapitalize="off" spellcheck="false">
+          <button id="timezone-toggle" type="button" aria-label="展开时区选项" aria-controls="timezone-list" tabindex="-1">▾</button>
+        </div>
+        <ul id="timezone-list" role="listbox" aria-label="时区选项" hidden></ul>
+        <small>新建的定时计划按此时区运行。</small>
+      </div></div></section>
       <div id="model-settings"></div>
       <section class="settings-panel">
         <h2>语音识别 ASR</h2>

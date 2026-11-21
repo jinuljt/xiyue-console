@@ -316,16 +316,108 @@ $('tts-provider').addEventListener('change', updateTTSFields);
 const timezoneLabels = {'Asia/Shanghai':'中国 · 北京、上海','Asia/Hong_Kong':'香港','Asia/Taipei':'台北',
   'Asia/Tokyo':'东京','Asia/Singapore':'新加坡','Europe/London':'伦敦','America/New_York':'纽约',
   'America/Los_Angeles':'洛杉矶','UTC':'协调世界时'};
-function renderTimezoneOptions(selected, query = '') {
-  const control = $('setting-timezone');
-  const zones = new Set([...Object.keys(timezoneLabels), ...(Intl.supportedValuesOf?.('timeZone') || []),
-    savedSettings.timezone, selected].filter(Boolean));
-  query = query.trim().toLowerCase();
-  const matches = [...zones].filter(zone => zone === selected || (zone + ' ' + (timezoneLabels[zone] || '')).toLowerCase().includes(query));
-  control.replaceChildren(...matches.map(zone => new Option(timezoneLabels[zone] ? `${timezoneLabels[zone]} · ${zone}` : zone, zone)));
-  control.value = selected;
+const timezoneInput = $('setting-timezone');
+const timezoneList = $('timezone-list');
+let chosenTimezone = '';
+let matchedTimezones = [];
+let highlightedTimezone = -1;
+
+function timezoneText(zone) {
+  return timezoneLabels[zone] ? `${timezoneLabels[zone]} · ${zone}` : zone;
 }
-$('timezone-search').addEventListener('input', event => renderTimezoneOptions($('setting-timezone').value, event.target.value));
+function closeTimezoneList() {
+  timezoneList.hidden = true;
+  timezoneInput.setAttribute('aria-expanded', 'false');
+  timezoneInput.removeAttribute('aria-activedescendant');
+  timezoneInput.value = timezoneText(chosenTimezone);
+}
+function highlightTimezone(index) {
+  if (!matchedTimezones.length) return;
+  highlightedTimezone = Math.max(0, Math.min(index, matchedTimezones.length - 1));
+  const option = timezoneList.children[highlightedTimezone];
+  timezoneInput.setAttribute('aria-activedescendant', option.id);
+  for (const [i, row] of Array.from(timezoneList.children).entries()) {
+    row.setAttribute('aria-selected', String(i === highlightedTimezone));
+  }
+  option.scrollIntoView({block:'nearest', inline:'nearest'});
+}
+function showTimezoneList(query = '') {
+  const zones = new Set([...Object.keys(timezoneLabels), ...(Intl.supportedValuesOf?.('timeZone') || []), chosenTimezone].filter(Boolean));
+  const term = query.trim().toLowerCase().replaceAll('_', ' ');
+  matchedTimezones = [...zones].filter(zone => timezoneText(zone).toLowerCase().replaceAll('_', ' ').includes(term));
+  timezoneList.replaceChildren(...matchedTimezones.map((zone, index) => {
+    const row = el('li', timezoneText(zone));
+    row.id = 'timezone-option-' + index;
+    row.setAttribute('role', 'option');
+    row.dataset.index = index;
+    return row;
+  }));
+  timezoneList.hidden = false;
+  timezoneInput.setAttribute('aria-expanded', 'true');
+  timezoneInput.removeAttribute('aria-activedescendant');
+  highlightedTimezone = -1;
+  if (matchedTimezones.length) highlightTimezone(query ? 0 : matchedTimezones.indexOf(chosenTimezone));
+  else timezoneList.append(el('li', '没有匹配的时区', 'timezone-empty'));
+}
+function chooseTimezone(index) {
+  const zone = matchedTimezones[index];
+  if (!zone) return;
+  const changed = chosenTimezone !== zone;
+  chosenTimezone = zone;
+  closeTimezoneList();
+  if (changed) timezoneInput.dispatchEvent(new Event('change', {bubbles:true}));
+}
+timezoneInput.addEventListener('focus', () => {
+  timezoneInput.select();
+  showTimezoneList();
+});
+timezoneInput.addEventListener('pointerdown', event => {
+  if (document.activeElement !== timezoneInput) {
+    event.preventDefault();
+    timezoneInput.focus();
+  }
+});
+timezoneInput.addEventListener('click', () => {
+  if (timezoneList.hidden) {
+    timezoneInput.select();
+    showTimezoneList();
+  }
+});
+timezoneInput.addEventListener('input', event => {
+  if (!event.isComposing) showTimezoneList(timezoneInput.value);
+});
+timezoneInput.addEventListener('compositionend', () => showTimezoneList(timezoneInput.value));
+timezoneInput.addEventListener('blur', closeTimezoneList);
+timezoneInput.addEventListener('keydown', event => {
+  if (event.isComposing) return;
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    event.preventDefault();
+    if (timezoneList.hidden) showTimezoneList();
+    else highlightTimezone(highlightedTimezone + (event.key === 'ArrowDown' ? 1 : -1));
+  } else if (event.key === 'Enter' && !timezoneList.hidden) {
+    event.preventDefault();
+    chooseTimezone(highlightedTimezone);
+  } else if (event.key === 'Escape' && !timezoneList.hidden) {
+    event.preventDefault();
+    closeTimezoneList();
+  }
+});
+timezoneList.addEventListener('pointerdown', event => {
+  if (event.target.closest('[role="option"]')) event.preventDefault();
+});
+timezoneList.addEventListener('click', event => {
+  const row = event.target.closest('[role="option"]');
+  if (row) chooseTimezone(Number(row.dataset.index));
+});
+$('timezone-toggle').addEventListener('pointerdown', event => event.preventDefault());
+$('timezone-toggle').addEventListener('click', () => {
+  if (!timezoneList.hidden) closeTimezoneList();
+  else if (document.activeElement !== timezoneInput) timezoneInput.focus();
+  else {
+    timezoneInput.select();
+    showTimezoneList();
+  }
+});
 function fillSettings(config) {
   settingsRevision=config.revision;
   savedSettings=config;
@@ -352,8 +444,8 @@ function fillSettings(config) {
   $('asr-clear-label').hidden = !config.asr.key_configured;
   $('asr-key-configured').textContent = config.asr.key_configured ? '已保存凭证，留空则保留。' : '';
   $('setting-wake').value = config.wake_word;
-  $('timezone-search').value = '';
-  renderTimezoneOptions(config.timezone);
+  chosenTimezone = config.timezone;
+  closeTimezoneList();
   $('setting-mode').value = config.mode;
   $('settings-save-state').textContent=config.updated_at ? `已保存 · ${when(config.updated_at)}` : '默认配置尚未保存';
   if (config.mode !== 'direct') $('advanced-settings').open = true;
@@ -489,13 +581,13 @@ async function verifySettings(service, output) {
   await refresh();
 }
 $('open-preview').addEventListener('click', () => { location.hash = 'system'; });
-$('settings-form').addEventListener('input',event=>{if(event.target.id==='timezone-search')return;settingsDirty=true;$('settings-save-state').textContent='有未保存的修改';});
-$('settings-form').addEventListener('change',event=>{if(event.target.id==='timezone-search')return;settingsDirty=true;$('settings-save-state').textContent='有未保存的修改';});
+$('settings-form').addEventListener('input',event=>{if(event.target === timezoneInput)return;settingsDirty=true;$('settings-save-state').textContent='有未保存的修改';});
+$('settings-form').addEventListener('change',()=>{settingsDirty=true;$('settings-save-state').textContent='有未保存的修改';});
 $('reload-settings').addEventListener('click',()=>handle(async()=>{const config=await api('/api/settings');settingsDirty=false;fillSettings(config);$('settings-error').textContent='';}));
 $('settings-form').addEventListener('submit',async event=>{
   event.preventDefault();const b=event.currentTarget.querySelector('[type=submit]');b.disabled=true;$('settings-error').textContent='';
   try{
-    const payload={revision:settingsRevision,name:savedSettings.name,wake_word:$('setting-wake').value,timezone:$('setting-timezone').value,mode:$('setting-mode').value};
+    const payload={revision:settingsRevision,name:savedSettings.name,wake_word:$('setting-wake').value,timezone:chosenTimezone,mode:$('setting-mode').value};
     const provider = $('asr-provider').value;
     payload.asr = {provider, endpoint: provider === 'sensevoice' ? $('asr-endpoint').value : '',
       model: provider === 'doubao' ? $('asr-resource').value :

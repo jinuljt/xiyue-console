@@ -30,3 +30,12 @@
 .password-strength[data-level=strong]{color:#235e40}.password-strength[data-level=strong] .strength-bar{background:#337f55}
 
 .service-actions{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;margin-top:12px}.service-actions .text-button{position:static}.service-actions button{margin:0}
+
+.timezone-picker{position:relative;min-width:0}
+.timezone-control{position:relative}.timezone-control input{width:100%;padding-right:40px}
+.timezone-control button{position:absolute;right:4px;top:50%;transform:translateY(-50%);background:transparent;color:var(--green);padding:5px 10px;min-width:36px}
+#timezone-list{position:absolute;z-index:4;top:calc(100% - 14px);left:0;right:0;max-height:238px;overflow:auto;overscroll-behavior:contain;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px #24352b22;list-style:none;margin:0;padding:4px}
+#timezone-list li{padding:7px 9px;overflow-wrap:anywhere}
+#timezone-list [role=option]{cursor:pointer}
+#timezone-list [role=option]:hover,#timezone-list [aria-selected=true]{background:var(--pale)}
+.timezone-empty{color:var(--muted)}
