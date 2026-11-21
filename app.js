@@ -99,7 +99,7 @@ function renderEvents() {
     box.append(time, el('p', event.text));
     const delivery = {
       pending:'待播报', playing:'正在播报', delivered:'已播报', failed:'播报失败',
-      interrupted:'播报被中断', expired:'提醒已过期', skipped:'任务已暂停或取消',
+      interrupted:'播报被中断', alarm_stopped:'响铃已停止', expired:'提醒已过期', skipped:'任务已暂停或取消',
       queue_full:'播报队列已满', unavailable:'播报服务未就绪'
     }[event.delivery];
     if (delivery) box.append(el('small', delivery, 'muted'));
@@ -261,8 +261,8 @@ function renderManagement() {
   $('voice-monitor').hidden = !voice?.available;
   if (voice?.available) {
     const last = voice.last_turn?.revision === config.revision ? voice.last_turn : null;
-    const stage = {configuration:'配置不完整', capture:'收音失败', cancelled:'语音已取消', local_task:'本地任务创建失败', confirmed_on_device:'已处理登录指令', asr:'识别失败', model:'模型回复失败', playback:'播报失败', completed:'已播报'};
-    $('voice-state').textContent = voice.busy ? '正在处理' : last ? stage[last.stage] || last.stage : '等待语音';
+    const stage = {configuration:'配置不完整', capture:'收音失败', cancelled:'语音已取消', local_task:'本地任务创建失败', confirmed_on_device:'已处理登录指令', conversation_ended:'对话已结束', asr:'识别失败', model:'模型回复失败', playback:'播报失败', completed:'已播报'};
+    $('voice-state').textContent = voice.alarm_ringing ? '倒计时响铃中' : voice.listening_followup ? '继续聆听' : voice.busy ? '正在处理' : last ? stage[last.stage] || last.stage : '等待语音';
     $('voice-timing').textContent = last
       ? (last.capture_ms ? '收音 ' + last.capture_ms + ' ms · ' : '') + '识别 ' + last.asr_ms + ' ms · 模型 ' + last.model_ms + ' ms · 播报 ' + last.playback_ms + ' ms'
       : '';
