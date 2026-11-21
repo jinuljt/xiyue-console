@@ -84,6 +84,10 @@
       </details>
       <p class="form-error" id="settings-error" role="alert"></p>
     </form>
+    <section id="owner-management" class="settings-panel" hidden>
+      <h2>管理员账号</h2>
+      <button id="owner-change" type="button" class="secondary">修改密码</button>
+    </section>
   </section>
   <section id="usage" class="page" hidden>
     <section class="system-card" id="voice-monitor" hidden>
@@ -102,12 +106,32 @@
   <form id="pair-form">
     <h2 id="pair-title">登录喜悦音箱</h2>
     <p id="pair-note"></p>
-    <label id="pair-code-field" hidden>设备设置或恢复码<input id="pair-code" type="password" autocomplete="off" maxlength="256"></label>
+    <label id="pair-code-field" hidden>设备设置码<input id="pair-code" type="password" autocomplete="off" maxlength="256"></label>
     <label>管理员用户名<input id="owner-name" autocomplete="username" required maxlength="64"></label>
     <label>管理员密码<input id="owner-password" type="password" autocomplete="current-password" required maxlength="256"></label>
     <p role="alert" id="pair-error"></p>
     <button type="submit" id="pair-submit" class="primary">登录</button>
-    <button type="button" id="pair-recover" class="text-button">忘记密码</button>
+  </form>
+  <section id="device-login" hidden aria-labelledby="device-login-title">
+    <h3 id="device-login-title">音箱确认登录</h3>
+    <p>忘记密码时，用音箱确认登录，再设置新密码。</p>
+    <div id="device-login-actions">
+      <button id="device-voice" type="button" class="secondary">语音确认</button>
+      <button id="device-button" type="button" class="secondary">按键确认</button>
+    </div>
+    <p id="device-login-hint" role="status"></p>
+    <p id="device-login-time"></p>
+    <button id="device-login-cancel" type="button" class="text-button" hidden>取消确认</button>
+  </section>
+</dialog>
+<dialog id="owner-change-dialog" aria-labelledby="owner-change-title">
+  <form id="owner-change-form">
+    <div class="dialog-heading"><h2 id="owner-change-title">修改管理员密码</h2><button type="button" data-close aria-label="关闭">×</button></div>
+    <p>设置成功后，当前页面保持登录，之前的会话失效。</p>
+    <label>新密码<input id="new-owner-password" type="password" autocomplete="new-password" required minlength="12" maxlength="256"></label>
+    <label>确认新密码<input id="repeat-owner-password" type="password" autocomplete="new-password" required minlength="12" maxlength="256"></label>
+    <p id="owner-change-error" role="alert"></p>
+    <button type="submit" class="primary">保存新密码</button>
   </form>
 </dialog>
 <div id="toast" role="status" hidden></div>

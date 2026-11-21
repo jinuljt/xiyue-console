@@ -111,10 +111,13 @@ async function refresh() {
   try {
     const session = await api('/api/session');
     const paired = session.authenticated;
-    $('owner-logout').hidden = !session.required || !paired;
+    $('owner-logout').hidden = $('owner-management').hidden = !session.required || !paired;
     document.querySelector('body > main').hidden = !paired;
     document.querySelector('body > aside').hidden = !paired;
     if (!paired) {
+      $('device-login').hidden = !session.device_voice && !session.device_button;
+      $('device-voice').hidden = !session.device_voice;
+      $('device-button').hidden = !session.device_button;
       if (!$('pair-dialog').open) {
         showOwnerForm(session.configured ? 'login' : 'setup');
         $('pair-dialog').showModal();
@@ -239,7 +242,7 @@ function renderManagement() {
   $('voice-monitor').hidden = !voice?.available;
   if (voice?.available) {
     const last = voice.last_turn?.revision === config.revision ? voice.last_turn : null;
-    const stage = {configuration:'配置不完整', capture:'收音失败', cancelled:'语音已取消', local_task:'本地任务创建失败', asr:'识别失败', model:'模型回复失败', playback:'播报失败', completed:'已播报'};
+    const stage = {configuration:'配置不完整', capture:'收音失败', cancelled:'语音已取消', local_task:'本地任务创建失败', confirmed_on_device:'已处理登录指令', asr:'识别失败', model:'模型回复失败', playback:'播报失败', completed:'已播报'};
     $('voice-state').textContent = voice.busy ? '正在处理' : last ? stage[last.stage] || last.stage : '等待语音';
     $('voice-timing').textContent = last
       ? (last.capture_ms ? '收音 ' + last.capture_ms + ' ms · ' : '') + '识别 ' + last.asr_ms + ' ms · 模型 ' + last.model_ms + ' ms · 播报 ' + last.playback_ms + ' ms'
@@ -560,23 +563,80 @@ let ownerFormMode = 'login';
 function showOwnerForm(mode) {
   ownerFormMode = mode;
   const isLogin = mode === 'login';
-  const isSetup = mode === 'setup';
-  $('pair-title').textContent = isLogin ? '登录喜悦音箱' : isSetup ? '设置管理员' : '恢复管理员账号';
-  $('pair-note').textContent = isLogin ? '' : isSetup
-    ? '输入安装时提供的一次性设置码，创建管理员账号。'
-    : '请先从音箱本机或安装工具获取新的恢复码。恢复后将退出此前登录的设备。';
+  $('pair-title').textContent = isLogin ? '登录喜悦音箱' : '设置管理员';
+  $('pair-note').textContent = isLogin ? '' : '输入安装时提供的一次性设置码，创建管理员账号。';
   $('pair-code-field').hidden = isLogin;
   $('pair-code').required = !isLogin;
   $('pair-code').value = '';
   $('owner-password').value = '';
   $('owner-password').minLength = isLogin ? 1 : 12;
   $('owner-password').autocomplete = isLogin ? 'current-password' : 'new-password';
-  $('pair-submit').textContent = isLogin ? '登录' : isSetup ? '设置并登录' : '重置并登录';
-  $('pair-recover').hidden = isSetup;
-  $('pair-recover').textContent = isLogin ? '忘记密码' : '返回登录';
+  $('pair-submit').textContent = isLogin ? '登录' : '设置并登录';
   $('pair-error').textContent = '';
 }
-$('pair-recover').addEventListener('click', () => showOwnerForm(ownerFormMode === 'login' ? 'recover' : 'login'));
+
+let deviceLoginAttempt;
+function stopDeviceLogin(message = '') {
+  clearTimeout(deviceLoginAttempt?.timer);
+  deviceLoginAttempt = null;
+  $('device-login-actions').hidden = false;
+  $('device-login-cancel').hidden = true;
+  $('device-login-time').textContent = '';
+  $('device-login-hint').textContent = message;
+}
+async function pollDeviceLogin(attempt) {
+  if (deviceLoginAttempt !== attempt) return;
+  const seconds = Math.ceil((attempt.expiry - Date.now()) / 1000);
+  if (seconds <= 0) {
+    stopDeviceLogin('确认已超时，请重新发起。');
+    return;
+  }
+  $('device-login-time').textContent = `剩余 ${seconds} 秒`;
+  try {
+    const result = await api('/api/session/device/claim', 'POST', {});
+    if (deviceLoginAttempt !== attempt) return;
+    if (result.authenticated) {
+      stopDeviceLogin();
+      await refresh();
+    } else {
+      attempt.timer = setTimeout(() => pollDeviceLogin(attempt), 1000);
+    }
+  } catch (error) {
+    if (deviceLoginAttempt === attempt) stopDeviceLogin(error.message);
+  }
+}
+for (const method of ['voice', 'button']) {
+  $(`device-${method}`).addEventListener('click', async () => {
+    if (deviceLoginAttempt) return;
+    const attempt = {};
+    deviceLoginAttempt = attempt;
+    $('device-login-actions').hidden = true;
+    $('device-login-hint').textContent = '正在发送确认请求…';
+    try {
+      const result = await api('/api/session/device', 'POST', {method});
+      if (deviceLoginAttempt !== attempt) return;
+      attempt.expiry = Date.now() + result.seconds * 1000;
+      $('device-login-hint').textContent = result.hint;
+      $('device-login-cancel').hidden = false;
+      await pollDeviceLogin(attempt);
+    } catch (error) {
+      if (deviceLoginAttempt === attempt) stopDeviceLogin(error.message);
+    }
+  });
+}
+$('device-login-cancel').addEventListener('click', async () => {
+  const attempt = deviceLoginAttempt;
+  if (!attempt) return;
+  clearTimeout(attempt.timer);
+  deviceLoginAttempt = null;
+  try {
+    await api('/api/session/device', 'DELETE', {});
+    stopDeviceLogin();
+  } catch (error) {
+    stopDeviceLogin(error.message);
+  }
+});
+
 $('pair-dialog').addEventListener('cancel', event => event.preventDefault());
 $('pair-form').addEventListener('submit', async event => {
   event.preventDefault();
@@ -590,9 +650,36 @@ $('pair-form').addEventListener('submit', async event => {
     await api(login ? '/api/session/login' : '/api/session/pair', 'POST', payload);
     $('pair-code').value = '';
     $('owner-password').value = '';
+    stopDeviceLogin();
     await refresh();
   } catch (error) {
     $('pair-error').textContent = error.message;
+  } finally {
+    submit.disabled = false;
+  }
+});
+$('owner-change').addEventListener('click', () => {
+  $('owner-change-form').reset();
+  $('owner-change-error').textContent = '';
+  $('owner-change-dialog').showModal();
+});
+$('owner-change-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  const password = $('new-owner-password').value;
+  if (password !== $('repeat-owner-password').value) {
+    $('owner-change-error').textContent = '两次输入的新密码不一致。';
+    return;
+  }
+  const submit = event.submitter;
+  submit.disabled = true;
+  $('owner-change-error').textContent = '';
+  try {
+    await api('/api/session/password', 'POST', {password});
+    $('owner-change-form').reset();
+    $('owner-change-dialog').close();
+    toast('管理员密码已修改');
+  } catch (error) {
+    $('owner-change-error').textContent = error.message;
   } finally {
     submit.disabled = false;
   }
