@@ -248,8 +248,8 @@ function renderManagement() {
   const device = serverStatus.device;
   $('device-name').textContent = device?.name || device?.model || '喜悦音箱';
   $('setting-device').textContent = [device?.name, device?.model, device?.firmware].filter(Boolean).join(' · ') || '型号待确认';
-  $('asr-unavailable').textContent = serverStatus.voice?.available ? '' : '语音链路待接通，可以先保存识别配置。';
-  $('tts-system-summary').textContent = serverStatus.voice?.available ? '' : '语音链路待接通，可以先选择并保存播报方式。';
+  $('asr-unavailable').textContent = serverStatus.voice?.available ? '' : '自动唤醒尚未接通，可单独验证识别。';
+  $('tts-system-summary').textContent = serverStatus.voice?.available ? '' : '自动唤醒尚未接通，可单独验证播报。';
   $('runtime-version').textContent = `版本 ${serverStatus.version}`;
   $('runtime-state').textContent = '运行中';
   $('runtime-uptime').textContent = `已运行 ${formatDuration(serverStatus.uptime_seconds)}`;
@@ -578,19 +578,37 @@ $('setup-action').addEventListener('click', () => {
   }
 });
 function serviceFormValues(name) {
+  if (name === 'asr') {
+    const provider = $('asr-provider').value;
+    return {provider, endpoint: provider === 'sensevoice' ? $('asr-endpoint').value : '',
+      model: provider === 'doubao' ? $('asr-resource').value :
+        (savedSettings.asr.provider === 'sensevoice' && savedSettings.asr.model) || 'sensevoice',
+      api_key: $('asr-key').value, clear_key: $('asr-clear').checked};
+  }
+  if (name === 'tts') {
+    const cloudTTS = $('tts-provider').value === 'doubao';
+    return {provider: $('tts-provider').value, endpoint: '', model: cloudTTS ? $('tts-voice').value : '',
+      api_key: cloudTTS ? $('tts-key').value : '', clear_key: $('tts-clear').checked};
+  }
   return {provider:$(`${name}-provider`).value, endpoint:$(`${name}-endpoint`).value,
     model:$(`${name}-model`).value, api_key:$(`${name}-key`).value,
     clear_key:$(`${name}-clear`).checked};
 }
 async function verifySettings(service, output) {
-  output.textContent = '正在验证…';
+  output.textContent = service === 'asr' ? '正在录音，请对音箱说一句话…' : service === 'tts' ? '正在让音箱播报…' : '正在验证…';
   try {
     const result = await api('/api/settings/verify', 'POST', {service, config:serviceFormValues(service)});
-    output.textContent = `验证成功 · ${result.duration_ms} ms`;
+    if (service === 'asr') output.textContent = '识别结果 · ' + result.text;
+    else if (service === 'tts') output.textContent = '已提交播报，请确认音箱有声音。';
+    else output.textContent = `验证成功 · ${result.duration_ms} ms`;
   } catch (error) {
     output.textContent = '验证失败 · ' + error.message;
   }
   await refresh();
+}
+for (const service of ['asr', 'tts']) {
+  const control = $(`${service}-verify`);
+  control.addEventListener('click', () => handle(() => verifySettings(service, $(`${service}-verify-result`)), control));
 }
 $('open-preview').addEventListener('click', () => { location.hash = 'system'; });
 $('settings-form').addEventListener('input',event=>{if(event.target === timezoneInput)return;settingsDirty=true;$('settings-save-state').textContent='有未保存的修改';});
@@ -600,14 +618,7 @@ $('settings-form').addEventListener('submit',async event=>{
   event.preventDefault();const b=event.currentTarget.querySelector('[type=submit]');b.disabled=true;$('settings-error').textContent='';
   try{
     const payload={revision:settingsRevision,name:savedSettings.name,wake_word:$('setting-wake').value,timezone:chosenTimezone,mode:$('setting-mode').value};
-    const provider = $('asr-provider').value;
-    payload.asr = {provider, endpoint: provider === 'sensevoice' ? $('asr-endpoint').value : '',
-      model: provider === 'doubao' ? $('asr-resource').value :
-        (savedSettings.asr.provider === 'sensevoice' && savedSettings.asr.model) || 'sensevoice',
-      api_key: $('asr-key').value, clear_key: $('asr-clear').checked};
-    const cloudTTS = $('tts-provider').value === 'doubao';
-    payload.tts = {provider: $('tts-provider').value, endpoint: '', model: cloudTTS ? $('tts-voice').value : '',
-      api_key: cloudTTS ? $('tts-key').value : '', clear_key: $('tts-clear').checked};
+    for (const name of ['asr', 'tts']) payload[name] = serviceFormValues(name);
     for (const name of ['llm', 'external']) payload[name] = serviceFormValues(name);
     const config=await api('/api/settings','PUT',payload);settingsDirty=false;fillSettings(config);await refresh();toast('配置已保存');
   }catch(e){$('settings-error').textContent=e.message;}finally{b.disabled=false;}

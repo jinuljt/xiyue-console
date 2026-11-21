@@ -62,7 +62,8 @@
           <label id="asr-clear-label" class="check-label" hidden><input type="checkbox" id="asr-clear">清除已保存的 ASR 凭证</label>
         </div>
         <p id="asr-cloud-note" hidden>选择豆包语音时，每次唤醒后的语音片段会上传识别。</p>
-        <a id="asr-guide" href="/help.html#asr">查看语音识别指南</a>
+        <div class="service-actions"><a id="asr-guide" href="/help.html#asr">查看语音识别指南</a><button id="asr-verify" type="button" class="secondary">验证</button></div>
+        <p id="asr-verify-result" class="muted" role="status"></p>
       </section>
       <section class="settings-panel">
         <h2>语音合成 TTS</h2>
@@ -74,7 +75,8 @@
           <label id="tts-clear-label" class="check-label" hidden><input type="checkbox" id="tts-clear">清除已保存的播报凭证</label>
         </div>
         <p id="tts-cloud-note" hidden>使用豆包播报时，回复和提醒的文字会发送给豆包语音合成。</p>
-        <a href="/help.html#tts">查看语音合成指南</a>
+        <div class="service-actions"><a href="/help.html#tts">查看语音合成指南</a><button id="tts-verify" type="button" class="secondary">验证</button></div>
+        <p id="tts-verify-result" class="muted" role="status"></p>
       </section>
       <details id="advanced-settings" class="settings-panel">
         <summary>高级接入</summary>
