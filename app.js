@@ -432,10 +432,18 @@ function fillSettings(config) {
   $('asr-provider').value = config.asr.provider === 'sensevoice' ? 'sensevoice' : 'doubao';
   $('asr-endpoint').value = config.asr.provider === 'sensevoice' ? config.asr.endpoint : '';
   const cloudPreset = providerOptions.asr.find(item => item.id === 'doubao');
-  $('asr-resource').replaceChildren(...(cloudPreset?.models || []).map(id => new Option(id, id)));
+  const resourceNames = {
+    'volc.seedasr.sauc.duration':'2.0 小时版 · 按识别时长',
+    'volc.seedasr.sauc.concurrent':'2.0 并发版 · 按并发包月'
+  };
+  const resources = cloudPreset?.models || [];
+  $('asr-resource').replaceChildren(...resources.map(id => new Option(resourceNames[id] || id, id)));
   const resourceID = config.asr.provider === 'doubao' ? config.asr.model : '';
-  if (resourceID && ![...$('asr-resource').options].some(option => option.value === resourceID)) {
-    $('asr-resource').append(new Option(resourceID, resourceID));
+  if (resourceID && !resources.includes(resourceID)) {
+    const previous = new Option('此前配置的资源 · 当前已保存', resourceID);
+    previous.hidden = true;
+    previous.disabled = true;
+    $('asr-resource').append(previous);
   }
   $('asr-resource').value = resourceID || cloudPreset?.model || '';
   updateASRFields();
