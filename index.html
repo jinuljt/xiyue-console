@@ -55,13 +55,12 @@
         <h2>语音识别 ASR</h2>
         <p id="asr-unavailable"></p>
         <div id="device-asr-fields" class="field-grid" hidden>
-          <label>语音识别服务<select id="asr-provider"><option value="doubao">豆包语音（云端）</option><option value="sensevoice">自建 SenseVoice（FunASR）</option></select></label>
+          <label>语音识别服务<select id="asr-provider"><option value="doubao">豆包实时语音识别</option><option value="sensevoice">自建 SenseVoice（FunASR）</option></select></label>
           <label id="asr-endpoint-field">服务地址<input type="url" id="asr-endpoint" placeholder="https://识别服务地址/v1" maxlength="2000"></label>
-          <label id="asr-resource-field">识别计费版本<select id="asr-resource"></select></label>
           <label><span id="asr-key-title">访问凭证</span><input type="password" id="asr-key" autocomplete="new-password" maxlength="8192"><small id="asr-key-configured"></small></label>
           <label id="asr-clear-label" class="check-label" hidden><input type="checkbox" id="asr-clear">清除已保存的 ASR 凭证</label>
         </div>
-        <p id="asr-cloud-note" hidden>选择豆包语音时，每次唤醒后的语音片段会上传识别。</p>
+        <p id="asr-cloud-note" hidden>唤醒后边录边发送给豆包识别，按识别时长计费。</p>
         <div class="service-actions"><a id="asr-guide" href="/help.html#asr">查看语音识别指南</a><button id="asr-verify" type="button" class="secondary">验证</button></div>
         <p id="asr-verify-result" class="muted" role="status"></p>
       </section>

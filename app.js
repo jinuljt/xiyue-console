@@ -300,8 +300,6 @@ function updateASRFields() {
   const cloud = $('asr-provider').value === 'doubao';
   $('asr-endpoint-field').hidden = cloud;
   $('asr-endpoint').disabled = cloud;
-  $('asr-resource-field').hidden = !cloud;
-  $('asr-resource').disabled = !cloud;
   $('asr-key-title').textContent = cloud ? '豆包语音 API Key' : '访问凭证（可选）';
   $('asr-cloud-note').hidden = !cloud;
   $('asr-guide').href = '/help.html#' + (cloud ? 'asr-doubao' : 'asr-sensevoice');
@@ -434,21 +432,6 @@ function fillSettings(config) {
   updateTTSFields();
   $('asr-provider').value = config.asr.provider === 'sensevoice' ? 'sensevoice' : 'doubao';
   $('asr-endpoint').value = config.asr.provider === 'sensevoice' ? config.asr.endpoint : '';
-  const cloudPreset = providerOptions.asr.find(item => item.id === 'doubao');
-  const resourceNames = {
-    'volc.seedasr.sauc.duration':'2.0 小时版 · 按识别时长',
-    'volc.seedasr.sauc.concurrent':'2.0 并发版 · 按并发包月'
-  };
-  const resources = cloudPreset?.models || [];
-  $('asr-resource').replaceChildren(...resources.map(id => new Option(resourceNames[id] || id, id)));
-  const resourceID = config.asr.provider === 'doubao' ? config.asr.model : '';
-  if (resourceID && !resources.includes(resourceID)) {
-    const previous = new Option('此前配置的资源 · 当前已保存', resourceID);
-    previous.hidden = true;
-    previous.disabled = true;
-    $('asr-resource').append(previous);
-  }
-  $('asr-resource').value = resourceID || cloudPreset?.model || '';
   updateASRFields();
   $('asr-key').value = '';
   $('asr-clear').checked = false;
@@ -581,7 +564,7 @@ function serviceFormValues(name) {
   if (name === 'asr') {
     const provider = $('asr-provider').value;
     return {provider, endpoint: provider === 'sensevoice' ? $('asr-endpoint').value : '',
-      model: provider === 'doubao' ? $('asr-resource').value :
+      model: provider === 'doubao' ? '' :
         (savedSettings.asr.provider === 'sensevoice' && savedSettings.asr.model) || 'sensevoice',
       api_key: $('asr-key').value, clear_key: $('asr-clear').checked};
   }
