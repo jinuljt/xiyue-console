@@ -12,11 +12,11 @@
     <div class="nav-caption">功能运行</div>
     <button data-page="tasks"><span>☷</span> 任务与待办</button>
     <button data-page="schedules"><span>◷</span> 定时计划</button>
+    <button id="owner-logout" type="button" hidden><span aria-hidden="true">↪</span> 退出登录</button>
   </nav>
-  <div class="sidebar-bottom"><span class="status-dot"></span> 管理服务</div>
 </aside>
 <main>
-  <header><div><div class="eyebrow">XIYUE CONSOLE</div><h1 id="page-title">系统总览</h1><p id="page-subtitle">配置服务、管理能力，了解喜悦的运行情况。</p></div><div class="header-actions"><button class="primary" id="new-task" hidden>＋ 新建任务</button><button id="owner-logout" type="button" class="secondary" hidden>退出登录</button></div></header>
+  <header><div><div class="eyebrow">XIYUE CONSOLE</div><h1 id="page-title">系统总览</h1><p id="page-subtitle">配置服务、管理能力，了解喜悦的运行情况。</p></div><button class="primary" id="new-task" hidden>＋ 新建任务</button></header>
   <div id="connection-error" role="alert" hidden>暂时无法连接服务，页面状态可能已过期。正在重连…</div>
   <section id="home" class="page">
     <section id="first-setup" class="overview-banner" hidden>
