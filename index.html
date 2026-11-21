@@ -16,7 +16,7 @@
   <div class="sidebar-bottom"><span class="status-dot"></span> 管理服务</div>
 </aside>
 <main>
-  <header><div><div class="eyebrow">XIYUE CONSOLE</div><h1 id="page-title">系统总览</h1><p id="page-subtitle">配置服务、管理能力，了解喜悦的运行情况。</p></div><div class="header-actions"><button class="primary" id="new-task" hidden>＋ 新建任务</button></div></header>
+  <header><div><div class="eyebrow">XIYUE CONSOLE</div><h1 id="page-title">系统总览</h1><p id="page-subtitle">配置服务、管理能力，了解喜悦的运行情况。</p></div><div class="header-actions"><button class="primary" id="new-task" hidden>＋ 新建任务</button><button id="owner-logout" type="button" class="secondary" hidden>退出登录</button></div></header>
   <div id="connection-error" role="alert" hidden>暂时无法连接服务，页面状态可能已过期。正在重连…</div>
   <section id="home" class="page">
     <section id="first-setup" class="overview-banner" hidden>
@@ -40,7 +40,7 @@
   <section id="schedules" class="page" hidden><div class="section-heading"><p>支持一次性、每天和工作日。创建任务时选择执行时间即可。</p><button id="new-schedule" class="secondary">＋ 添加计划</button></div><div id="schedule-list"></div></section>
   <section id="system" class="page" hidden>
     <form id="settings-form">
-      <div class="settings-toolbar"><span id="settings-save-state" class="muted">正在加载配置…</span><div><button id="owner-logout" type="button" class="secondary" hidden>退出管理</button><button type="button" id="reload-settings" class="secondary">重新加载</button><button type="submit" class="primary">保存配置</button></div></div>
+      <div class="settings-toolbar"><span id="settings-save-state" class="muted">正在加载配置…</span><div><button type="button" id="reload-settings" class="secondary">重新加载</button><button type="submit" class="primary">保存配置</button></div></div>
       <section class="settings-panel"><div class="panel-heading"><h2>基本设置</h2><p>查看音箱型号，设置唤醒词和计划时区。</p></div><div class="field-grid"><div><span>音箱型号</span><p id="setting-device">型号待确认</p></div><label>唤醒词<input id="setting-wake" required maxlength="48"></label><div class="timezone-picker">
         <label for="setting-timezone">计划时区</label>
         <div class="timezone-control">
