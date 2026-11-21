@@ -125,7 +125,7 @@ async function refreshConsole() {
       $('device-voice').hidden = !session.device_voice;
       $('device-button').hidden = !session.device_button;
       const setup = !session.configured && session.setup_available;
-      $('pair-title').textContent = session.configured ? '登录喜悦音箱' : '设置管理员';
+      $('pair-title').textContent = session.configured ? '登录喜悦 Voice' : '设置管理员';
       $('pair-form').hidden = !session.configured && !setup;
       $('owner-install-needed').hidden = session.configured || setup;
       $('pair-form').dataset.mode = setup ? 'setup' : 'login';

@@ -18,7 +18,7 @@ function showEntry() {
       link.removeAttribute('aria-current');
     }
   }
-  document.title = entry.querySelector('h2').textContent + ' · 喜悦配置指南';
+  document.title = entry.querySelector('h2').textContent + ' · 喜悦 Voice 配置指南';
   window.scrollTo(0, 0);
 }
 
