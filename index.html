@@ -100,11 +100,14 @@
 <dialog id="preview-dialog"><form id="preview-form"><div class="dialog-heading"><h2>验证已保存的服务</h2><button type="button" data-close aria-label="关闭">×</button></div><p class="muted">此操作会向已保存的服务发送文字，可能产生服务商费用。</p><p id="preview-hybrid" class="muted" hidden>普通问题发给大模型。可输入「交给外部助手：概括当前工作区」验证连接器。</p><label>验证文字<input id="preview-message" required maxlength="16000" placeholder="输入一句想询问的话"></label><p id="preview-result" class="task-text"></p><p class="form-error" role="alert"></p><button type="submit" class="primary">发送验证</button></form></dialog>
 <dialog id="pair-dialog" aria-labelledby="pair-title">
   <form id="pair-form">
-    <h2 id="pair-title">配对喜悦音箱</h2>
-    <p>输入安装工具提供的一次性配对码。</p>
-    <label>配对码<input id="pair-code" type="password" autocomplete="off" required maxlength="256"></label>
+    <h2 id="pair-title">登录喜悦音箱</h2>
+    <p id="pair-note"></p>
+    <label id="pair-code-field" hidden>设备设置或恢复码<input id="pair-code" type="password" autocomplete="off" maxlength="256"></label>
+    <label>管理员用户名<input id="owner-name" autocomplete="username" required maxlength="64"></label>
+    <label>管理员密码<input id="owner-password" type="password" autocomplete="current-password" required maxlength="256"></label>
     <p role="alert" id="pair-error"></p>
-    <button type="submit" class="primary">配对</button>
+    <button type="submit" id="pair-submit" class="primary">登录</button>
+    <button type="button" id="pair-recover" class="text-button">忘记密码</button>
   </form>
 </dialog>
 <div id="toast" role="status" hidden></div>

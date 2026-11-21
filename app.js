@@ -115,7 +115,10 @@ async function refresh() {
     document.querySelector('body > main').hidden = !paired;
     document.querySelector('body > aside').hidden = !paired;
     if (!paired) {
-      if (!$('pair-dialog').open) $('pair-dialog').showModal();
+      if (!$('pair-dialog').open) {
+        showOwnerForm(session.configured ? 'login' : 'setup');
+        $('pair-dialog').showModal();
+      }
       return;
     }
     if ($('pair-dialog').open) $('pair-dialog').close();
@@ -553,6 +556,27 @@ $('external-task-form').addEventListener('submit', async event => {
     submit.disabled = false;
   }
 });
+let ownerFormMode = 'login';
+function showOwnerForm(mode) {
+  ownerFormMode = mode;
+  const isLogin = mode === 'login';
+  const isSetup = mode === 'setup';
+  $('pair-title').textContent = isLogin ? '登录喜悦音箱' : isSetup ? '设置管理员' : '恢复管理员账号';
+  $('pair-note').textContent = isLogin ? '' : isSetup
+    ? '输入安装时提供的一次性设置码，创建管理员账号。'
+    : '请先从音箱本机或安装工具获取新的恢复码。恢复后将退出此前登录的设备。';
+  $('pair-code-field').hidden = isLogin;
+  $('pair-code').required = !isLogin;
+  $('pair-code').value = '';
+  $('owner-password').value = '';
+  $('owner-password').minLength = isLogin ? 1 : 12;
+  $('owner-password').autocomplete = isLogin ? 'current-password' : 'new-password';
+  $('pair-submit').textContent = isLogin ? '登录' : isSetup ? '设置并登录' : '重置并登录';
+  $('pair-recover').hidden = isSetup;
+  $('pair-recover').textContent = isLogin ? '忘记密码' : '返回登录';
+  $('pair-error').textContent = '';
+}
+$('pair-recover').addEventListener('click', () => showOwnerForm(ownerFormMode === 'login' ? 'recover' : 'login'));
 $('pair-dialog').addEventListener('cancel', event => event.preventDefault());
 $('pair-form').addEventListener('submit', async event => {
   event.preventDefault();
@@ -560,8 +584,12 @@ $('pair-form').addEventListener('submit', async event => {
   submit.disabled = true;
   $('pair-error').textContent = '';
   try {
-    await api('/api/session/pair', 'POST', {code: $('pair-code').value});
+    const login = ownerFormMode === 'login';
+    const payload = {username: $('owner-name').value, password: $('owner-password').value};
+    if (!login) payload.code = $('pair-code').value;
+    await api(login ? '/api/session/login' : '/api/session/pair', 'POST', payload);
     $('pair-code').value = '';
+    $('owner-password').value = '';
     await refresh();
   } catch (error) {
     $('pair-error').textContent = error.message;
@@ -570,7 +598,6 @@ $('pair-form').addEventListener('submit', async event => {
   }
 });
 $('owner-logout').addEventListener('click', () => handle(async () => {
-  if (!window.confirm('退出管理后，需要从设备取得新的配对码才能再次登录。')) return;
   await api('/api/session/logout', 'POST', {});
   location.reload();
 }, $('owner-logout')));
