@@ -57,3 +57,19 @@
 .asr-connection{display:grid;gap:16px}
 .asr-credentials small:not(:empty){display:block;margin-top:6px;color:var(--muted)}
 #device-asr-fields .check-label{margin-top:8px}
+
+.activity-filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));gap:0 14px}
+.activity-charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,290px),1fr));gap:18px;margin-block:20px}
+.activity-charts svg{display:block;width:100%;height:auto}
+.activity-charts text{fill:var(--muted);font:12px system-ui}
+.activity-chart-axis{stroke:var(--line)}
+.activity-cost-line{stroke:var(--green);fill:none;stroke-width:2}
+.activity-cost-point,.usage-type-llm{fill:var(--green);background:var(--green)}
+.usage-type-asr{fill:#537da2;background:#537da2}
+.usage-type-tts{fill:#a57938;background:#a57938}
+.usage-type-external{fill:#7d689b;background:#7d689b}
+.usage-type-ability{fill:#ad6462;background:#ad6462}
+.activity-legend{display:flex;flex-wrap:wrap;gap:8px}
+.activity-legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px}
+.dialogue-entry{border-top:1px solid var(--line);padding-block:10px;overflow-wrap:anywhere}
+#dialogue-panel summary{cursor:pointer;font-size:18px;font-weight:600}

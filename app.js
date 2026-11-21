@@ -8,7 +8,6 @@ let providerOptions = null;
 let settingsDirty = false;
 let settingsRevision = 0;
 let savedSettings;
-let lastUsage = '';
 let serverStatus = null;
 const titles = {
   home: ['系统总览', '配置服务、管理能力，了解喜悦的运行情况。'],
@@ -282,18 +281,7 @@ function renderManagement() {
   $('setup-action').hidden = step === 'verify_device';
   $('setup-action').textContent = {verify:'验证服务',configure_asr:'配置语音识别',configure_tts:'配置语音合成',configure:'配置大模型'}[step] || '';
   if (!settingsDirty && settingsRevision !== config.revision) fillSettings(config);
-  const usageSignature=JSON.stringify(serverStatus.usage || []);
-  if (usageSignature !== lastUsage) {lastUsage=usageSignature; renderUsage(serverStatus.usage || []);}
-}
-function renderUsage(records) {
-  $('usage-requests').textContent = records.length;
-  const measured=records.filter(r => r.input_tokens !== undefined || r.output_tokens !== undefined);
-  $('usage-tokens').textContent=measured.length ? `${measured.reduce((n,r)=>n+(r.input_tokens||0),0).toLocaleString()} / ${measured.reduce((n,r)=>n+(r.output_tokens||0),0).toLocaleString()}` : '—';
-  $('usage-token-note').textContent=measured.length ? `${measured.length} 条调用返回用量；其余不估算` : '尚无服务商返回的用量';
-  if (!records.length) {$('usage-history').replaceChildren(empty('暂无调用记录。配置模型后，可手动发起文字验证。'));return;}
-  const table=el('table');const head=el('tr');for (const text of ['时间','服务 / 模型','结果','耗时','输入 / 输出 Token']) head.append(el('th',text));table.append(head);
-  for (const r of [...records].reverse()) {const row=el('tr');for (const text of [when(r.at),`${serviceNames[r.service] || r.service} · ${r.model || r.provider}`,r.success?'成功':`失败 · ${r.error_code}`,`${r.duration_ms} ms`,`${r.input_tokens ?? '未提供'} / ${r.output_tokens ?? '未提供'}`]) row.append(el('td',text));table.append(row);}
-  $('usage-history').replaceChildren(table);
+  if (location.hash === '#usage' && usageRequest === 0) refreshActivityPage();
 }
 function inputLabel(title,input) {const label=el('label',title);label.append(input);return label;}
 function updateASRFields() {
@@ -593,7 +581,6 @@ for (const service of ['asr', 'tts']) {
   const control = $(`${service}-verify`);
   control.addEventListener('click', () => handle(() => verifySettings(service, $(`${service}-verify-result`)), control));
 }
-$('open-preview').addEventListener('click', () => { location.hash = 'system'; });
 $('settings-form').addEventListener('input',event=>{if(event.target === timezoneInput)return;settingsDirty=true;$('settings-save-state').textContent='有未保存的修改';});
 $('settings-form').addEventListener('change',()=>{settingsDirty=true;$('settings-save-state').textContent='有未保存的修改';});
 $('reload-settings').addEventListener('click',()=>handle(async()=>{const config=await api('/api/settings');settingsDirty=false;fillSettings(config);$('settings-error').textContent='';}));
@@ -821,3 +808,252 @@ $('owner-logout').addEventListener('click', () => handle(async () => {
   location.reload();
 }, $('owner-logout')));
 page(location.hash.slice(1));refresh();setInterval(refresh,2500);setInterval(updateCountdowns,1000);
+
+const activityTypes = {asr: '语音识别', llm: '大模型', tts: '语音合成', external: '外部 Agent', ability: '付费能力'};
+const activityPageSize = 50;
+let usageOffset = 0;
+let dialogueOffset = 0;
+let usageRequest = 0;
+let dialogueRequest = 0;
+let usageData;
+let usageRates = [];
+const count = value => value.toLocaleString('zh-CN');
+const amount = (number, currency) => new Intl.NumberFormat('zh-CN', {
+  style: 'currency', currency, maximumFractionDigits: 6
+}).format(number);
+
+function pageControls(prefix, offset, total) {
+  $(prefix + '-prev').disabled = offset === 0;
+  $(prefix + '-next').disabled = offset + activityPageSize >= total;
+  $(prefix + '-page').textContent = total ? `${offset + 1}–${Math.min(offset + activityPageSize, total)} / ${total}` : '0 条';
+}
+function svgElement(name, attrs) {
+  const element = document.createElementNS('http://www.w3.org/2000/svg', name);
+  for (const [key, value] of Object.entries(attrs)) element.setAttribute(key, value);
+  return element;
+}
+function activityChart(container, values, legend, render, formatMax) {
+  if (!values.length) {
+    container.replaceChildren(empty('暂无所选范围的数据。'));
+    return;
+  }
+  const max = Math.max(...values.map(item => item.total), 0);
+  const scale = max || 1;
+  const svg = svgElement('svg', {viewBox: '0 0 496 160', role: 'img', 'aria-label': legend});
+  for (const y of [20, 127]) {
+    svg.append(svgElement('line', {x1: 0, y1: y, x2: 496, y2: y, class: 'activity-chart-axis'}));
+  }
+  const topLabel=svgElement('text',{x: 3,y: 14});
+  topLabel.textContent=formatMax(max);
+  svg.append(topLabel);
+  const width = 488 / values.length;
+  const y = value => 127 - (value / scale) * 105;
+  render(svg, width, y);
+  for (const [item, x, align] of [[values[0],4,'start'],[values.at(-1),492,'end']]) {
+    const date=svgElement('text',{x,y:150,'text-anchor':align});
+    date.textContent=item.day.slice(5);
+    svg.append(date);
+    if (values.length===1) break;
+  }
+  container.replaceChildren(svg);
+}
+function drawActivityCharts() {
+  if (!usageData) return;
+  const {daily, start_day: start, end_day: end} = usageData;
+  const allDays = new Map();
+  for (let day = new Date(start + 'T00:00Z'); day.toISOString().slice(0,10) <= end; day.setUTCDate(day.getUTCDate() + 1)) {
+    const key=day.toISOString().slice(0,10);
+    allDays.set(key,{day:key, calls:{}, cost:null});
+  }
+  const currency=$('usage-currency').value;
+  for (const row of daily) {
+    const slot=allDays.get(row.day);
+    if (!slot) continue;
+    slot.calls[row.service]=(slot.calls[row.service]||0)+row.calls;
+    if (row.known_cost && row.currency===currency) slot.cost=(slot.cost||0)+row.estimated;
+  }
+  const points=[...allDays.values()];
+  const counts=points.map(slot=>({...slot,total:Object.values(slot.calls).reduce((a,b)=>a+b,0)}));
+  activityChart($('usage-call-chart'),daily.length ? counts : [],'每天各类请求次数',(svg,width,y)=>{
+    for (const [index, point] of counts.entries()) {
+      let total=0;
+      for (const [service, calls] of Object.entries(point.calls)) {
+        const height=y(total)-y(total+calls);
+        const bar=svgElement('rect',{x:4+index*width+width*.13,y:y(total+calls),width:width*.74,height,class:'usage-type-'+service});
+        const label=svgElement('title',{});
+        label.textContent=`${point.day} ${activityTypes[service]||service} ${calls} 次`;
+        bar.append(label); svg.append(bar);
+        total+=calls;
+      }
+    }
+  }, num=>count(num)+' 次');
+  const costs=points.map(slot=>({...slot,total:slot.cost||0}));
+  activityChart($('usage-cost-chart'),currency ? costs : [],'每天可估价的费用',(svg,width,y)=>{
+    const line=[];
+    let pen='M';
+    for (const [index,point] of costs.entries()) {
+      if (point.cost===null) { pen='M'; continue; }
+      const x=4+(index+.5)*width, cy=y(point.cost);
+      line.push(pen,x,cy); pen='L';
+      const dot=svgElement('circle',{cx:x,cy,r:2.6,class:'activity-cost-point'});
+      const label=svgElement('title',{});
+      label.textContent=`${point.day} ${amount(point.cost,currency)}`;
+      dot.append(label); svg.append(dot);
+    }
+    svg.prepend(svgElement('path',{d:line.join(' '),class:'activity-cost-line'}));
+  }, num=>amount(num,currency));
+  $('usage-chart-legend').replaceChildren(...Object.entries(activityTypes)
+    .filter(([type])=>daily.some(row=>row.service===type))
+    .map(([type,text])=>{
+      const span=el('span',undefined,'muted');
+      const mark=el('i',undefined,'usage-type-'+type);
+      mark.setAttribute('aria-hidden','true');
+      span.append(mark,document.createTextNode(text));
+      return span;
+    }));
+}
+$('usage-currency').addEventListener('change', drawActivityCharts);
+
+function displayUsage(data) {
+  usageData=data;
+  usageRates=data.rates;
+  const providers=$('usage-provider'), selected=providers.value;
+  providers.replaceChildren(new Option('所有服务商',''),...Object.keys(data.providers).sort().map(name=>new Option(name,name)));
+  providers.value=Object.hasOwn(data.providers,selected)?selected:'';
+  const totals = {calls:0, metered:0, known:0, audio:0, characters:0, input:0, output:0};
+  const costs=new Map();
+  for (const row of data.daily) {
+    totals.calls+=row.calls; totals.metered+=row.metered; totals.known+=row.known_cost;
+    totals.audio+=row.audio_ms; totals.characters+=row.characters;
+    totals.input+=row.input_tokens; totals.output+=row.output_tokens;
+    if (row.known_cost) costs.set(row.currency,(costs.get(row.currency)||0)+row.estimated);
+  }
+  $('usage-requests').textContent=count(totals.calls);
+  $('usage-measured').textContent=`${count(totals.metered)} 条有计量数据`;
+  $('usage-estimated').textContent=[...costs].map(([currency,cost])=>amount(cost,currency)).join(' / ')||'—';
+  $('usage-coverage').textContent=`${count(totals.known)} 条可估价 · ${count(totals.calls-totals.known)} 条无法估价`;
+  $('usage-voice-units').textContent=totals.metered
+    ? `${(totals.audio/60000).toLocaleString('zh-CN',{maximumFractionDigits:2})} 分钟 / ${count(totals.characters)} 字` : '—';
+  $('usage-tokens').textContent=`输入 / 输出 Token · ${count(totals.input)} / ${count(totals.output)}`;
+  const currency=$('usage-currency'), currencyChoice=currency.value;
+  currency.replaceChildren(...[...costs.keys()].sort().map(code=>new Option(code,code)));
+  if (costs.has(currencyChoice)) currency.value=currencyChoice;
+  $('usage-currency-label').hidden=costs.size<2;
+  drawActivityCharts();
+
+  const table=el('table'), heading=el('tr');
+  for (const title of ['时间','类型 / 服务','结果','耗时','用量','估算费用']) heading.append(el('th',title));
+  const head=el('thead'); head.append(heading); table.append(head);
+  const body=el('tbody');
+  for (const row of data.recent) {
+    const measured=[];
+    if (row.input_tokens!==undefined || row.output_tokens!==undefined) measured.push(`${row.input_tokens??'—'} / ${row.output_tokens??'—'} Token`);
+    if (row.audio_ms!==undefined) measured.push(`${(row.audio_ms/1000).toFixed(2)} 秒（设备计量）`);
+    if (row.characters!==undefined) measured.push(`${row.characters} 字（设备计量）`);
+    const tr=el('tr');
+    const service=`${activityTypes[row.service]||row.service} · ${[row.provider,row.model].filter(Boolean).join(' / ')}`;
+    const status=(row.success?'成功':`失败 · ${row.error_code||'服务错误'}`)+(row.test?' · 验证':'');
+    for (const value of [when(row.at),service,status,`${row.duration_ms} ms`,measured.join(' · ')||'未提供']) tr.append(el('td',value));
+    const estimate=el('td',row.estimated===undefined?'无法估价':amount(row.estimated,row.currency));
+    if (row.price_source) estimate.title=`${row.price_source} · ${row.price_at?.slice(0,10)||''}`;
+    tr.append(estimate);
+    body.append(tr);
+  }
+  table.append(body);
+  $('usage-history').replaceChildren(data.recent.length?table:empty('暂无符合条件的最近调用。'));
+  pageControls('usage',usageOffset,data.recent_count);
+}
+async function loadUsage() {
+  const version=++usageRequest;
+  const query=new URLSearchParams({days:$('usage-days').value,type:$('usage-type').value,provider:$('usage-provider').value,offset:usageOffset});
+  try {
+    const data=await api('/api/usage?'+query);
+    if (version!==usageRequest) return;
+    if (usageOffset && data.recent_count<=usageOffset) {
+      usageOffset=Math.max(0,Math.floor((data.recent_count-1)/activityPageSize)*activityPageSize);
+      return loadUsage();
+    }
+    $('usage-error').textContent='';
+    displayUsage(data);
+  } catch (err) {
+    if (version===usageRequest) $('usage-error').textContent=err.message;
+  }
+}
+for (const id of ['usage-days','usage-type','usage-provider']) $(id).addEventListener('change',()=>{usageOffset=0;loadUsage();});
+$('usage-prev').addEventListener('click',()=>{usageOffset=Math.max(0,usageOffset-activityPageSize);loadUsage();});
+$('usage-next').addEventListener('click',()=>{usageOffset+=activityPageSize;loadUsage();});
+
+const rateForm=$('usage-rate-form');
+function renderRateFields() {
+  const id=rateForm.elements.service.value;
+  const listed={asr:[['per_audio_hour','每小时音频']],tts:[['per_10k_chars','每万字']]};
+  const fields=listed[id]||[['per_million_in','每百万输入 Token'],['per_million_hit','每百万缓存命中 Token（可选）'],['per_million_out','每百万输出 Token']];
+  const current=usageRates.find(rate=>rate.service===id&&rate.provider===rateForm.elements.provider.value.trim()&&rate.model===rateForm.elements.model.value.trim());
+  if (current) rateForm.elements.currency.value=current.currency;
+  $('usage-rate-fields').replaceChildren(...fields.map(([name,title])=>{
+    const input=el('input');input.name=name;input.type='number';input.min='0';input.step='any';
+    input.value=current?.[name]??'';
+    return inputLabel(title,input);
+  }));
+}
+for (const name of ['service','provider','model']) rateForm.elements[name].addEventListener('change',renderRateFields);
+renderRateFields();
+rateForm.addEventListener('submit',event=>{
+  event.preventDefault();
+  handle(async()=>{
+    const payload=Object.fromEntries(new FormData(rateForm));
+    for (const key of Object.keys(payload)) if(key.startsWith('per_')) payload[key]=payload[key]===''?null:Number(payload[key]);
+    await api('/api/usage/rates','PUT',payload);
+    toast('估算单价已保存');
+    await loadUsage();
+  },event.submitter);
+});
+
+async function loadDialogues() {
+  const version=++dialogueRequest;
+  const query=new URLSearchParams({date:$('dialogue-date').value,offset:dialogueOffset});
+  const data=await api('/api/dialogues?'+query);
+  if (version!==dialogueRequest) return;
+  if (dialogueOffset&&data.count<=dialogueOffset) {
+    dialogueOffset=Math.max(0,Math.floor((data.count-1)/activityPageSize)*activityPageSize);
+    return loadDialogues();
+  }
+  $('dialogue-enabled').checked=data.enabled;
+  $('dialogue-list').replaceChildren(...(data.items.length?data.items.map(item=>{
+    const article=el('article',undefined,'dialogue-entry');
+    const stage=item.timing.stage==='completed'?'已播报':(`结束阶段 · ${item.timing.stage}`);
+    const detail=`${when(item.at)} · ${stage} · 识别 ${item.timing.asr_ms} ms · 模型 ${item.timing.model_ms} ms`;
+    article.append(el('small',detail,'muted'),el('p',item.transcript?'我说：'+item.transcript:'未取得识别文本。'));
+    if (item.reply) article.append(el('p','喜悦 Voice：'+item.reply));
+    const remove=button('删除',async()=>{
+      if (!window.confirm('删除这一条对话记录？')) return;
+      await api('/api/dialogues?id='+encodeURIComponent(item.id),'DELETE');
+      await loadDialogues();
+    },'secondary');
+    article.append(remove);
+    return article;
+  }):[empty(data.enabled?'暂无对话记录。':'对话记录已关闭。')]));
+  pageControls('dialogue',dialogueOffset,data.count);
+}
+$('dialogue-panel').addEventListener('toggle',()=>{if($('dialogue-panel').open)handle(loadDialogues);});
+$('dialogue-date').addEventListener('change',()=>{dialogueOffset=0;handle(loadDialogues);});
+$('dialogue-prev').addEventListener('click',()=>{dialogueOffset=Math.max(0,dialogueOffset-activityPageSize);handle(loadDialogues);});
+$('dialogue-next').addEventListener('click',()=>{dialogueOffset+=activityPageSize;handle(loadDialogues);});
+$('dialogue-enabled').addEventListener('change',event=>handle(async()=>{
+  try {await api('/api/dialogues','PUT',{enabled:event.target.checked});}
+  catch (err){event.target.checked=!event.target.checked;throw err;}
+  await loadDialogues();
+},event.target));
+$('dialogue-clear').addEventListener('click',()=>handle(async()=>{
+  if(!window.confirm('清空音箱上的全部对话记录？'))return;
+  await api('/api/dialogues','DELETE');
+  dialogueOffset=0;
+  await loadDialogues();
+},$('dialogue-clear')));
+function refreshActivityPage() {
+  if(location.hash!=='#usage'||!serverStatus)return;
+  loadUsage();
+  if($('dialogue-panel').open)handle(loadDialogues);
+}
+window.addEventListener('hashchange',refreshActivityPage);
+setInterval(refreshActivityPage,15000);
