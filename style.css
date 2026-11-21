@@ -48,3 +48,12 @@
   .sidebar > nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));overflow:visible}
   #owner-logout{grid-column:1 / -1;margin-top:6px}
 }
+
+.brand-name{font-size:18px;white-space:nowrap}
+#device-asr-fields{align-items:start;gap:16px 24px;margin:20px 0}
+#device-asr-fields label{margin:0}
+#device-asr-fields input:not([type=checkbox]),#device-asr-fields select{height:40px;padding-block:0}
+.asr-connection,.asr-credentials{min-width:0}
+.asr-connection{display:grid;gap:16px}
+.asr-credentials small:not(:empty){display:block;margin-top:6px;color:var(--muted)}
+#device-asr-fields .check-label{margin-top:8px}

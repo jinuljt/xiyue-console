@@ -1,9 +1,9 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>喜悦 · 控制台</title><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>喜悦 Voice · 控制台</title><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
 <body>
 <aside class="sidebar">
-  <a class="brand" href="#home"><span class="brandmark">悦</span><span>喜悦<small>生活里的小帮手</small></span></a>
+  <a class="brand" href="#home"><span class="brandmark" aria-hidden="true">悦</span><span class="brand-name">喜悦 Voice</span></a>
   <nav aria-label="主导航">
     <button data-page="home" class="selected"><span>◉</span> 系统总览</button>
     <button data-page="system"><span>⚙</span> 系统配置</button>
@@ -16,7 +16,7 @@
   </nav>
 </aside>
 <main>
-  <header><div><div class="eyebrow">XIYUE CONSOLE</div><h1 id="page-title">系统总览</h1><p id="page-subtitle">配置服务、管理能力，了解喜悦的运行情况。</p></div><button class="primary" id="new-task" hidden>＋ 新建任务</button></header>
+  <header><div><h1 id="page-title">系统总览</h1><p id="page-subtitle">配置服务、管理能力，了解喜悦的运行情况。</p></div><button class="primary" id="new-task" hidden>＋ 新建任务</button></header>
   <div id="connection-error" role="alert" hidden>暂时无法连接服务，页面状态可能已过期。正在重连…</div>
   <section id="home" class="page">
     <section id="first-setup" class="overview-banner" hidden>
@@ -55,10 +55,15 @@
         <h2>语音识别 ASR</h2>
         <p id="asr-unavailable"></p>
         <div id="device-asr-fields" class="field-grid" hidden>
-          <label>语音识别服务<select id="asr-provider"><option value="doubao">豆包实时语音识别</option><option value="sensevoice">自建 SenseVoice（FunASR）</option></select></label>
-          <label id="asr-endpoint-field">服务地址<input type="url" id="asr-endpoint" placeholder="https://识别服务地址/v1" maxlength="2000"></label>
-          <label><span id="asr-key-title">访问凭证</span><input type="password" id="asr-key" autocomplete="new-password" maxlength="8192"><small id="asr-key-configured"></small></label>
-          <label id="asr-clear-label" class="check-label" hidden><input type="checkbox" id="asr-clear">清除已保存的 ASR 凭证</label>
+          <div class="asr-connection">
+            <label>语音识别服务<select id="asr-provider"><option value="doubao">豆包实时语音识别</option><option value="sensevoice">自建 SenseVoice（FunASR）</option></select></label>
+            <label id="asr-endpoint-field">服务地址<input type="url" id="asr-endpoint" placeholder="https://识别服务地址/v1" maxlength="2000"></label>
+          </div>
+          <div class="asr-credentials">
+            <label><span id="asr-key-title">访问凭证</span><input type="password" id="asr-key" autocomplete="new-password" maxlength="8192" aria-describedby="asr-key-configured"></label>
+            <small id="asr-key-configured"></small>
+            <label id="asr-clear-label" class="check-label" hidden><input type="checkbox" id="asr-clear">清除已保存的 ASR 凭证</label>
+          </div>
         </div>
         <p id="asr-cloud-note" hidden>唤醒后边录边发送给豆包识别，按识别时长计费。</p>
         <div class="service-actions"><a id="asr-guide" href="/help.html#asr">查看语音识别指南</a><button id="asr-verify" type="button" class="secondary">验证</button></div>
@@ -111,7 +116,7 @@
 <dialog id="task-dialog"><form id="task-form"><div class="dialog-heading"><h2>创建任务</h2><button type="button" data-close aria-label="关闭">×</button></div><label>使用什么能力？<select id="task-ability" required></select></label><div id="task-fields"></div><label>什么时候执行？<select id="task-when"><option value="now">现在</option><option value="once">指定时间，一次</option><option value="daily">每天</option><option value="weekdays">每个工作日</option></select></label><label id="date-label" hidden>首次执行时间<input id="task-date" type="datetime-local"></label><p class="muted" id="timezone-note"></p><p class="form-error" role="alert"></p><button class="primary" type="submit">创建</button></form></dialog>
 <dialog id="config-dialog"><form id="config-form"><div class="dialog-heading"><h2 id="config-title">能力配置</h2><button type="button" data-close aria-label="关闭">×</button></div><p id="config-description" class="muted"></p><label class="check-label"><input id="config-enabled" type="checkbox">启用此能力（现有任务不受停用影响）</label><div id="config-fields"></div><p class="form-error" role="alert"></p><button class="primary" type="submit">保存配置</button></form></dialog>
 <dialog id="pair-dialog" aria-labelledby="pair-title">
-  <h2 id="pair-title">登录喜悦音箱</h2>
+  <h2 id="pair-title">登录喜悦 Voice</h2>
   <form id="pair-form">
     <label>管理员用户名<input id="owner-name" autocomplete="username" required maxlength="64"></label>
     <label>管理员密码<input id="owner-password" type="password" autocomplete="current-password" required maxlength="256"></label>
