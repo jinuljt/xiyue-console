@@ -118,10 +118,9 @@ async function refresh() {
       $('device-login').hidden = !session.device_voice && !session.device_button;
       $('device-voice').hidden = !session.device_voice;
       $('device-button').hidden = !session.device_button;
-      if (!$('pair-dialog').open) {
-        showOwnerForm(session.configured ? 'login' : 'setup');
-        $('pair-dialog').showModal();
-      }
+      $('pair-form').hidden = !session.configured;
+      $('owner-install-needed').hidden = session.configured;
+      if (!$('pair-dialog').open) $('pair-dialog').showModal();
       return;
     }
     if ($('pair-dialog').open) $('pair-dialog').close();
@@ -559,22 +558,6 @@ $('external-task-form').addEventListener('submit', async event => {
     submit.disabled = false;
   }
 });
-let ownerFormMode = 'login';
-function showOwnerForm(mode) {
-  ownerFormMode = mode;
-  const isLogin = mode === 'login';
-  $('pair-title').textContent = isLogin ? '登录喜悦音箱' : '设置管理员';
-  $('pair-note').textContent = isLogin ? '' : '输入安装时提供的一次性设置码，创建管理员账号。';
-  $('pair-code-field').hidden = isLogin;
-  $('pair-code').required = !isLogin;
-  $('pair-code').value = '';
-  $('owner-password').value = '';
-  $('owner-password').minLength = isLogin ? 1 : 12;
-  $('owner-password').autocomplete = isLogin ? 'current-password' : 'new-password';
-  $('pair-submit').textContent = isLogin ? '登录' : '设置并登录';
-  $('pair-error').textContent = '';
-}
-
 let deviceLoginAttempt;
 function stopDeviceLogin(message = '') {
   clearTimeout(deviceLoginAttempt?.timer);
@@ -644,11 +627,8 @@ $('pair-form').addEventListener('submit', async event => {
   submit.disabled = true;
   $('pair-error').textContent = '';
   try {
-    const login = ownerFormMode === 'login';
     const payload = {username: $('owner-name').value, password: $('owner-password').value};
-    if (!login) payload.code = $('pair-code').value;
-    await api(login ? '/api/session/login' : '/api/session/pair', 'POST', payload);
-    $('pair-code').value = '';
+    await api('/api/session/login', 'POST', payload);
     $('owner-password').value = '';
     stopDeviceLogin();
     await refresh();

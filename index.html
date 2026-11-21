@@ -105,13 +105,13 @@
 <dialog id="pair-dialog" aria-labelledby="pair-title">
   <form id="pair-form">
     <h2 id="pair-title">登录喜悦音箱</h2>
-    <p id="pair-note"></p>
-    <label id="pair-code-field" hidden>设备设置码<input id="pair-code" type="password" autocomplete="off" maxlength="256"></label>
+
     <label>管理员用户名<input id="owner-name" autocomplete="username" required maxlength="64"></label>
     <label>管理员密码<input id="owner-password" type="password" autocomplete="current-password" required maxlength="256"></label>
     <p role="alert" id="pair-error"></p>
     <button type="submit" id="pair-submit" class="primary">登录</button>
   </form>
+  <p id="owner-install-needed" hidden>请在喜悦安装向导中设置管理员，再回到这里登录。</p>
   <section id="device-login" hidden aria-labelledby="device-login-title">
     <h3 id="device-login-title">音箱确认登录</h3>
     <p>忘记密码时，用音箱确认登录，再设置新密码。</p>
