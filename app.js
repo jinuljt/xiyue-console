@@ -16,10 +16,10 @@ let roomAudioRead = 0;
 const titles = {
   home: ['系统总览', '配置服务、管理能力，了解喜悦的运行情况。'],
   system: ['系统配置', '选择语音与模型服务，配置外部 Agent 和基础设置。'],
-  abilities: ['能力管理', '配置功能、管理授权，并启用你需要的能力。'],
+  abilities: ['能力中心', '查看和配置音箱提供的能力。'],
   usage: ['状态与用量', '查看运行情况与真实调用记录。'],
   tasks: ['任务与待办', '查看功能执行进度，确认、暂停或取消任务。'],
-  schedules: ['定时计划', '管理能力的定时执行。']
+  automation: ['自动化', '设定自动运行规则，或手动运行已有流程。']
 };
 const statusNames = {waiting: '等待确认', timer: '计时中', paused: '已暂停', done: '已完成', cancelled: '已取消', running: '进行中'};
 function el(tag, text, className) {const e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (className) e.className = className; return e;}
@@ -32,13 +32,24 @@ async function api(path, method = 'GET', body) {
 }
 async function handle(fn, b) {if (b) b.disabled = true; try {await fn();} catch (e) {toast(e.message);} finally {if (b) b.disabled = false;}}
 function page(name) {
+  if (name === 'schedules') {
+    name = 'automation';
+    showAutomation('rules');
+  }
   if (!titles[name]) name = 'home';
   document.querySelectorAll('.page').forEach(p => {p.hidden = p.id !== name;});
   document.querySelectorAll('[data-page]').forEach(b => b.classList.toggle('selected', b.dataset.page === name));
   $('page-title').textContent = titles[name][0]; $('page-subtitle').textContent = titles[name][1];
   if (name === 'tasks' && state.settings) handle(loadExternalTasks);
   if (name === 'abilities' && state.settings) handle(loadRoomAudio);
-  $('new-task').hidden = !['tasks', 'schedules'].includes(name);
+  $('new-task').hidden = name !== 'tasks';
+}
+function showAutomation(group) {
+  for (const b of document.querySelectorAll('[data-automation]')) {
+    const selected = b.dataset.automation === group;
+    b.setAttribute('aria-pressed', String(selected));
+    $(b.getAttribute('aria-controls')).hidden = !selected;
+  }
 }
 function when(iso, timeZone = state.settings?.timezone) {
   return new Date(iso).toLocaleString('zh-CN', {timeZone,month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
@@ -66,24 +77,64 @@ function renderTasks() {
   $('task-list').replaceChildren(...(tasks.length ? tasks.map(taskCard) : [empty('还没有任务。先记一件待办吧。')]));
 
 }
+// These device-owned manifests predate the flow library. Imported manifests
+// contain only declarative steps and belong to the flow list.
+const builtinAbilityIDs = new Set(['todo', 'reminder', 'quick-timer']);
+function capabilityRow(name, description, status, actions) {
+  const row = el('article', undefined, 'capability-row');
+  const info = el('div', undefined, 'capability-info');
+  info.append(el('h3', name), el('p', description));
+  const controls = el('div', undefined, 'capability-actions');
+  controls.append(...actions);
+  row.append(info, status, controls);
+  return row;
+}
+function savedAbilityRow(a) {
+  const m = a.manifest;
+  const status = el('span', a.enabled ? '已启用' : '未启用', a.enabled ? 'badge' : 'badge paused');
+  const description = m.id === 'quick-timer' ? '设置倒计时，到点响铃。' : m.description;
+  const detail = button('详情', () => openConfig(m.id), 'secondary');
+  detail.setAttribute('aria-label', `查看${m.name}详情`);
+  return capabilityRow(m.name, description, status, [detail]);
+}
 function renderAbilities() {
   const abilities = Object.values(state.abilities).sort((a,b) => a.manifest.id.localeCompare(b.manifest.id));
-  $('stat-abilities').textContent = abilities.filter(a => a.enabled).length;
-  $('ability-list').replaceChildren(...abilities.map(a => {
-    const card = el('article', undefined, 'ability-card'); const m = a.manifest;
-    const icon = el('div', m.id === 'todo' ? '✓' : m.id === 'reminder' ? '◷' : '✧', 'ability-icon');
-    const top = el('div', undefined, 'card-top'); top.append(el('h3', m.name), el('span', a.enabled ? '已启用' : '未启用', 'badge' + (a.enabled ? '' : ' paused')));
-    const actions = el('div', undefined, 'actions'); actions.append(button('配置', () => openConfig(m.id)));
-    if (a.enabled) actions.append(button('创建任务', () => openTask(m.id), 'main-action'));
-    card.append(icon, top, el('p', m.description, 'description'), actions, el('p', `${m.id} · v${m.version} · ${m.steps.length} 个步骤`, 'ability-meta'));
-    return card;
-  }));
+  const builtins = abilities.filter(a => builtinAbilityIDs.has(a.manifest.id));
+  const flows = abilities.filter(a => !builtinAbilityIDs.has(a.manifest.id));
+  const roomBadge = el('span', '', 'badge');
+  roomBadge.id = 'room-audio-badge';
+  const detail = button('详情', openRoomAudio, 'secondary');
+  detail.setAttribute('aria-label', '查看房间声音直连详情');
+  const roomRow = capabilityRow('房间声音直连', '播放局域网收音设备的实时声音', roomBadge, [detail]);
+  $('ability-list').replaceChildren(roomRow, ...builtins.map(savedAbilityRow));
+  $('flow-list').replaceChildren(...(flows.length ? flows.map(savedAbilityRow) : [empty('还没有手动流程。')]));
+  renderRoomAudioBadge();
+}
+function renderRoomAudioBadge(unavailable = false) {
+  const badge = $('room-audio-badge');
+  if (badge) {
+    const stages = {stopped:'已停止', connecting:'连接中', connected:'等待音频', playing:'听音中',
+      reconnecting:'重连中', paused:'暂时让行', stopping:'停止中'};
+    const label = unavailable ? '状态暂不可用' : !roomAudio ? '读取中' : !roomAudio.available ? '不可用'
+      : !roomAudio.config.source ? '待配置' : stages[roomAudio.status.stage] || '状态暂不可用';
+    badge.textContent = label;
+    badge.classList.toggle('paused', unavailable || !roomAudio?.status.running);
+  }
+  $('stat-abilities').textContent = Object.values(state.abilities)
+    .filter(a => builtinAbilityIDs.has(a.manifest.id) && a.enabled).length +
+    Number(Boolean(roomAudio?.available && roomAudio.config.source));
+}
+async function openRoomAudio() {
+  $('room-audio-dialog').showModal();
+  try {await loadRoomAudio();}
+  catch (error) {$('room-audio-status').textContent = error.message;}
 }
 function roomAudioDraft() {
   return {name: $('room-audio-name').value.trim(), source: $('room-audio-source').value.trim(),
     volume: $('room-audio-volume').valueAsNumber};
 }
 function renderRoomAudio() {
+  renderRoomAudioBadge();
   if (!roomAudio) return;
   const {available, config, status} = roomAudio;
   if (!roomAudioDirty) {
@@ -154,22 +205,21 @@ $('room-audio-play').addEventListener('click', () => handle(() => roomAudioActio
   roomAudio.status = await api(`/api/room-audio/${action}`, 'POST', {});
 })));
 function renderSchedules() {
-
   $('schedule-list').replaceChildren(...(state.schedules.length ? state.schedules.map(sc => {
-    const card = el('article', undefined, 'schedule-card');
-    const top = el('div', undefined, 'card-top'); const waitingRetry = sc.enabled && sc.repeat === 'once' && sc.failure;
+    const waitingRetry = sc.enabled && sc.repeat === 'once' && sc.failure;
     const label = waitingRetry ? '执行失败' : sc.enabled ? '已启用' : '任务已创建';
-    top.append(el('h3', state.abilities[sc.ability_id]?.manifest.name || sc.ability_id), el('span', label, 'badge'));
-    card.append(top, el('p', `${when(sc.next_at, sc.timezone)} · ${{once:'一次',daily:'每天',weekdays:'工作日'}[sc.repeat]} · ${sc.timezone}`, 'muted'));
-    if (sc.inputs.content) card.append(el('p', sc.inputs.content, 'task-text'));
-    if (sc.failure) card.append(el('p', sc.failure, 'form-error'));
-    if (waitingRetry) card.append(button('重试一次', async () => {
+    const name = state.abilities[sc.ability_id]?.manifest.name || sc.ability_id;
+    const frequency = {once:'一次',daily:'每天',weekdays:'工作日'}[sc.repeat];
+    const actions = [];
+    if (waitingRetry) actions.push(button('重试', async () => {
       await api(`/api/schedules/${sc.id}/retry`, 'POST', {});
       await refresh();
-    }, 'text-button'));
-    card.append(button('删除计划', async () => {await api(`/api/schedules/${sc.id}`, 'DELETE'); await refresh();}, 'text-button'));
-    return card;
-  }) : [empty('还没有定时计划。可以先添加一个明天的提醒。')]));
+    }, 'secondary'));
+    actions.push(button('删除', async () => {await api(`/api/schedules/${sc.id}`, 'DELETE'); await refresh();}, 'secondary'));
+    const description = [`${when(sc.next_at, sc.timezone)} · ${frequency} · ${sc.timezone}`, sc.inputs.content, sc.failure]
+      .filter(Boolean).join(' · ');
+    return capabilityRow(name, description, el('span', label, sc.enabled && !sc.failure ? 'badge' : 'badge paused'), actions);
+  }) : [empty('还没有定时规则。')]));
 }
 function renderEvents() {
   const events = [...state.events].reverse().slice(0, 15);
@@ -205,6 +255,7 @@ async function refreshConsole() {
       $('room-audio-source').value = '';
       $('room-audio-name').value = '';
       $('room-audio-check').hidden = true;
+      if ($('room-audio-dialog').open) $('room-audio-dialog').close();
       $('device-login').hidden = !session.device_voice && !session.device_button;
       $('device-voice').hidden = !session.device_voice;
       $('device-button').hidden = !session.device_button;
@@ -230,7 +281,10 @@ async function refreshConsole() {
     renderManagement(); updateCountdowns();
     if (!$('abilities').hidden && !roomAudioPending) {
       try {await loadRoomAudio();}
-      catch {$('room-audio-status').textContent = '暂时无法获取听音状态';}
+      catch {
+        renderRoomAudioBadge(true);
+        $('room-audio-status').textContent = '暂时无法获取听音状态';
+      }
     }
     if (!$('tasks').hidden && state.settings?.revision !== externalTaskRevision) await loadExternalTasks();
   }
@@ -259,12 +313,17 @@ function fieldsFor(ability, container, mode) {
   }
 }
 function fieldValues(container) {return Object.fromEntries([...container.querySelectorAll('input:not([data-kind=secret]):not([data-clear-secret])')].map(i => [i.name, i.value]));}
-function openTask(abilityID = 'todo', schedule = false) {
-  const choices = Object.values(state.abilities).filter(a => a.enabled);
+function openTask(abilityID = 'todo', context = 'task') {
+  const flow = context === 'flow';
+  const schedule = context === 'rule';
+  const choices = Object.values(state.abilities).filter(a => a.enabled && (!flow || !builtinAbilityIDs.has(a.manifest.id)));
   if (!choices.length) {toast('请先启用一个能力'); return;}
   $('task-ability').replaceChildren(...choices.map(a => {const o = el('option', a.manifest.name); o.value = a.manifest.id; return o;}));
   if (choices.some(a => a.manifest.id === abilityID)) $('task-ability').value = abilityID;
   $('task-form').querySelector('.form-error').textContent = '';
+  $('task-title').textContent = schedule ? '新建定时规则' : flow ? '运行流程' : '创建任务';
+  $('task-when-label').hidden = flow;
+  $('task-when').querySelector('[value="now"]').disabled = schedule;
   $('task-when').value = schedule ? 'once' : 'now'; updateWhen();
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: state.settings.timezone, year:'numeric', month:'2-digit', day:'2-digit',
@@ -278,7 +337,17 @@ function openTask(abilityID = 'todo', schedule = false) {
 function updateWhen() {const scheduled = $('task-when').value !== 'now'; $('date-label').hidden = !scheduled; $('task-date').required = scheduled; $('timezone-note').textContent = scheduled ? `使用时区：${state.settings.timezone}` : '';}
 function openConfig(id) {
   editingAbility = id; const a = state.abilities[id];
-  $('config-title').textContent = a.manifest.name; $('config-description').textContent = a.manifest.description;
+  const flow = !builtinAbilityIDs.has(id);
+  $('config-title').textContent = a.manifest.name;
+  $('config-description').textContent = id === 'quick-timer' ? '设置倒计时，到点响铃。' : a.manifest.description;
+  $('config-enable-label').textContent = flow ? '启用此流程' : '启用此能力';
+  $('flow-steps').hidden = !flow;
+  const kinds = {say:'播报',ask:'提问并等待确认',confirm:'等待确认',tone:'提示音',timer:'计时'};
+  $('flow-steps').replaceChildren(...(flow ? a.manifest.steps.map(step =>
+    el('li', [kinds[step.kind], step.seconds ? formatDuration(step.seconds) : '', step.text].filter(Boolean).join(' · '))) : []));
+  $('config-run').hidden = !a.enabled;
+  $('config-run').disabled = false;
+  $('config-run').textContent = flow ? '运行流程' : '创建任务';
   $('config-enabled').checked = a.enabled; fieldsFor(a, $('config-fields'), 'config');
   $('config-form').querySelector('.form-error').textContent = ''; $('config-dialog').showModal();
 }
@@ -294,18 +363,33 @@ $('task-form').addEventListener('submit', e => submitForm(e, async () => {
   else {body.local_time = $('task-date').value; body.repeat = $('task-when').value; await api('/api/schedules', 'POST', body);}
 }));
 $('config-form').addEventListener('submit', e => submitForm(e, () => api(`/api/abilities/${editingAbility}`, 'PUT', {enabled: $('config-enabled').checked, config: fieldValues($('config-fields')), secrets: Object.fromEntries([...$('config-fields').querySelectorAll('input[data-kind=secret]')].filter(i => i.value).map(i => [i.name,i.value])), clear_secrets: [...$('config-fields').querySelectorAll('input[data-clear-secret]:checked')].map(i=>i.dataset.clearSecret)})));
+$('config-run').addEventListener('click', () => {
+  $('config-dialog').close();
+  openTask(editingAbility, builtinAbilityIDs.has(editingAbility) ? 'task' : 'flow');
+});
+$('config-form').addEventListener('input', () => {$('config-run').disabled = true;});
 $('task-ability').addEventListener('change', () => fieldsFor(state.abilities[$('task-ability').value], $('task-fields'), 'task'));
 $('task-when').addEventListener('change', updateWhen);
 $('new-task').addEventListener('click', () => openTask());
-$('new-schedule').addEventListener('click', () => openTask('reminder', true));
+$('new-schedule').addEventListener('click', () => openTask('reminder', 'rule'));
 $('import-ability').addEventListener('click', () => $('ability-file').click());
 $('ability-file').addEventListener('change', () => handle(async () => {
   const file = $('ability-file').files[0]; if (!file) return;
-  try {if (file.size > 128 * 1024) throw new Error('能力文件不能超过128KB'); const manifest = JSON.parse(await file.text()); await api('/api/abilities', 'POST', manifest); await refresh(); toast('已导入，配置后可启用');}
+  try {
+    if (file.size > 128 * 1024) throw new Error('流程文件不能超过 128 KB');
+    const manifest = JSON.parse(await file.text());
+    if (builtinAbilityIDs.has(manifest?.id)) throw new Error('此流程使用了系统保留的 ID');
+    const {id} = await api('/api/abilities', 'POST', manifest);
+    await refresh();
+    showAutomation('flows');
+    if (state.abilities[id]) openConfig(id);
+    toast('流程已导入');
+  }
   finally {$('ability-file').value = '';}
 }));
 document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => b.closest('dialog').close()));
 document.querySelectorAll('[data-page]').forEach(b => b.addEventListener('click', () => {location.hash = b.dataset.page;}));
+document.querySelectorAll('[data-automation]').forEach(b => b.addEventListener('click', () => showAutomation(b.dataset.automation)));
 document.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => {location.hash = b.dataset.go;}));
 window.addEventListener('hashchange', () => page(location.hash.slice(1)));
 
