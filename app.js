@@ -9,6 +9,10 @@ let settingsDirty = false;
 let settingsRevision = 0;
 let savedSettings;
 let serverStatus = null;
+let roomAudio;
+let roomAudioDirty = false;
+let roomAudioPending = false;
+let roomAudioRead = 0;
 const titles = {
   home: ['系统总览', '配置服务、管理能力，了解喜悦的运行情况。'],
   system: ['系统配置', '选择语音与模型服务，配置外部 Agent 和基础设置。'],
@@ -33,6 +37,7 @@ function page(name) {
   document.querySelectorAll('[data-page]').forEach(b => b.classList.toggle('selected', b.dataset.page === name));
   $('page-title').textContent = titles[name][0]; $('page-subtitle').textContent = titles[name][1];
   if (name === 'tasks' && state.settings) handle(loadExternalTasks);
+  if (name === 'abilities' && state.settings) handle(loadRoomAudio);
   $('new-task').hidden = !['tasks', 'schedules'].includes(name);
 }
 function when(iso, timeZone = state.settings?.timezone) {
@@ -74,6 +79,80 @@ function renderAbilities() {
     return card;
   }));
 }
+function roomAudioDraft() {
+  return {name: $('room-audio-name').value.trim(), source: $('room-audio-source').value.trim(),
+    volume: $('room-audio-volume').valueAsNumber};
+}
+function renderRoomAudio() {
+  if (!roomAudio) return;
+  const {available, config, status} = roomAudio;
+  if (!roomAudioDirty) {
+    $('room-audio-name').value = config.name || '';
+    $('room-audio-source').value = config.source;
+    $('room-audio-volume').value = config.volume;
+  }
+  $('room-audio-name').disabled = $('room-audio-source').disabled = $('room-audio-volume').disabled = status.running;
+  $('room-audio-save').disabled = roomAudioPending || status.running || !roomAudioDirty;
+  $('room-audio-verify').disabled = roomAudioPending || status.running || !roomAudioDraft().source;
+  $('room-audio-play').disabled = roomAudioPending || status.stage === 'stopping' ||
+    (!status.running && (!available || !config.source || roomAudioDirty));
+  $('room-audio-play').textContent = status.running ? '停止听音' : '开始听音';
+  const labels = {stopped: '已停止', connecting: '正在连接收音设备', connected: '已连接，等待音频数据',
+    playing: '正在向音箱送音', reconnecting: '音频流中断或不可用，正在重连',
+    paused: '已让行，等待音箱空闲', stopping: '正在停止'};
+  const label = available ? [config.name, labels[status.stage] || '状态暂不可用'].filter(Boolean).join(' · ')
+    : '此设备没有可用的本地播放入口';
+  if ($('room-audio-status').textContent !== label) $('room-audio-status').textContent = label;
+  $('room-audio-last').textContent = status.last_audio_at
+    ? '最近收到音频数据 ' + new Date(status.last_audio_at).toLocaleTimeString('zh-CN', {timeZone: state.settings?.timezone}) : '';
+}
+async function loadRoomAudio() {
+  const read = ++roomAudioRead;
+  const next = await api('/api/room-audio');
+  if (read !== roomAudioRead) return;
+  roomAudio = next;
+  renderRoomAudio();
+}
+async function roomAudioAction(action) {
+  if (roomAudioPending) return;
+  roomAudioPending = true;
+  roomAudioRead++;
+  renderRoomAudio();
+  try {await action();}
+  finally {roomAudioPending = false; renderRoomAudio();}
+}
+$('room-audio-form').addEventListener('input', () => {
+  roomAudioDirty = true;
+  $('room-audio-check').hidden = true;
+  renderRoomAudio();
+});
+$('room-audio-form').addEventListener('submit', event => {
+  event.preventDefault();
+  handle(() => roomAudioAction(async () => {
+    const submitted = roomAudioDraft();
+    await api('/api/room-audio', 'PUT', submitted);
+    const latest = roomAudioDraft();
+    if (latest.name === submitted.name && latest.source === submitted.source && latest.volume === submitted.volume) roomAudioDirty = false;
+    await loadRoomAudio();
+    toast('房间声音配置已保存');
+  }));
+});
+$('room-audio-verify').addEventListener('click', () => handle(() => roomAudioAction(async () => {
+  if (!$('room-audio-form').reportValidity()) return;
+  const check = $('room-audio-check');
+  check.hidden = false;
+  check.textContent = '正在检查音频格式和数据';
+  try {
+    const result = await api('/api/room-audio/verify', 'POST', roomAudioDraft());
+    check.textContent = `已收到音频数据 · ${result.sample_rate} Hz · ${result.channels} 声道`;
+  } catch (e) {
+    check.textContent = e.message;
+  }
+})));
+$('room-audio-play').addEventListener('click', () => handle(() => roomAudioAction(async () => {
+  const action = roomAudio.status.running ? 'stop' : 'start';
+  roomAudio.status = await api(`/api/room-audio/${action}`, 'POST', {});
+})));
 function renderSchedules() {
 
   $('schedule-list').replaceChildren(...(state.schedules.length ? state.schedules.map(sc => {
@@ -120,6 +199,12 @@ async function refreshConsole() {
     document.querySelector('body > main').hidden = !paired;
     document.querySelector('body > aside').hidden = !paired;
     if (!paired) {
+      roomAudioRead++;
+      roomAudio = undefined;
+      roomAudioDirty = false;
+      $('room-audio-source').value = '';
+      $('room-audio-name').value = '';
+      $('room-audio-check').hidden = true;
       $('device-login').hidden = !session.device_voice && !session.device_button;
       $('device-voice').hidden = !session.device_voice;
       $('device-button').hidden = !session.device_button;
@@ -143,6 +228,10 @@ async function refreshConsole() {
     // Preserve button focus and click targets while polling unchanged state.
     if (snapshot !== lastSnapshot) {state = next; lastSnapshot = snapshot; renderTasks(); renderAbilities(); renderSchedules(); renderEvents();}
     renderManagement(); updateCountdowns();
+    if (!$('abilities').hidden && !roomAudioPending) {
+      try {await loadRoomAudio();}
+      catch {$('room-audio-status').textContent = '暂时无法获取听音状态';}
+    }
     if (!$('tasks').hidden && state.settings?.revision !== externalTaskRevision) await loadExternalTasks();
   }
   catch {

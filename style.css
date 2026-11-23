@@ -73,3 +73,7 @@
 .activity-legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px}
 .dialogue-entry{border-top:1px solid var(--line);padding-block:10px;overflow-wrap:anywhere}
 #dialogue-panel summary{cursor:pointer;font-size:18px;font-weight:600}
+
+.room-audio-fields{grid-template-columns:minmax(0,2fr) minmax(0,1fr)}
+.room-audio-source{grid-column:1/-1}
+@media(max-width:640px){.room-audio-fields{grid-template-columns:minmax(0,1fr)}}
