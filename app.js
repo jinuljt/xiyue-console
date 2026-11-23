@@ -706,18 +706,29 @@ function renderManagement() {
   $('runtime-uptime').textContent = `已运行 ${formatDuration(serverStatus.uptime_seconds)}`;
   $('status-uptime').textContent = formatDuration(serverStatus.uptime_seconds);
   $('status-memory').textContent = `${(serverStatus.memory_bytes / 1024 / 1024).toFixed(1)} MiB（非进程总内存 / 整机内存）`;
-  const runtimeLabel = {disabled:'设备语音未启用', not_configured:'待配置', configured:'已配置，等待验证', succeeded:'最近验证成功', failed:'最近验证失败'};
-  $('service-status').replaceChildren(...Object.entries(serverStatus.services || {}).flatMap(([name, value]) =>
-    [el('dt', serviceNames[name] || name), el('dd', runtimeLabel[value.state] || '—')]));
+  const services = serverStatus.services || {};
+  const rows = ['asr','llm','tts','external'].filter(name => services[name]).map(name => {
+    const value = services[name];
+    const use = value.last_use;
+    const configured = value.state === 'disabled' ? '设备未启用语音'
+      : value.state === 'not_configured' ? '未配置' : '已配置';
+    const outcome = !use ? '无使用记录'
+      : use.success ? (name === 'tts' && value.provider === 'system' ? '已交给系统播报' : '成功') : '失败';
+    return [serviceNames[name], configured, use ? outcome + (use.current_config ? '' : '（配置变更前）') : outcome,
+      use ? when(use.at) : '—'];
+  });
+  tableContent('service-status',['服务','配置','最近实际调用','时间'],rows,'暂无服务状态。');
   const voice = serverStatus.voice;
   $('voice-monitor').hidden = !voice?.available;
   if (voice?.available) {
     const last = voice.last_turn?.revision === config.revision ? voice.last_turn : null;
-    const stage = {configuration:'配置不完整', capture:'收音失败', cancelled:'语音已取消', local_task:'本地任务创建失败', confirmed_on_device:'已处理登录指令', conversation_ended:'对话已结束', asr:'识别失败', model:'模型回复失败', playback:'播报失败', completed:'已播报'};
-    $('voice-state').textContent = voice.alarm_ringing ? '倒计时响铃中' : voice.listening_followup ? '继续聆听' : voice.busy ? '正在处理' : last ? stage[last.stage] || last.stage : '等待语音';
+    const stage = {configuration:'配置不完整', capture:'收音失败', cancelled:'语音已取消', local_task:'本地任务创建失败', confirmed_on_device:'已处理登录指令', conversation_ended:'对话已结束', alarm_stopped:'已停止响铃', asr:'识别失败', model:'模型回复失败', playback:'播报失败', completed:'已处理'};
+    const current = voice.alarm_ringing ? '正在响铃' : voice.listening_followup ? '等待你继续说话' : voice.busy
+      ? '正在处理语音' : voice.wake_detector_ready ? '待唤醒 · 说「' + config.wake_word + '」' : '唤醒检测未就绪';
+    $('voice-state').textContent = current;
     $('voice-timing').textContent = last
-      ? (last.capture_ms ? '收音 ' + last.capture_ms + ' ms · ' : '') + '识别 ' + last.asr_ms + ' ms · 模型 ' + last.model_ms + ' ms · 播报 ' + last.playback_ms + ' ms'
-      : '';
+      ? '最近一轮：' + (stage[last.stage] || '已结束') + ' · ' + (last.capture_ms ? '收音 ' + last.capture_ms + ' ms · ' : '') + '识别 ' + last.asr_ms + ' ms · 模型 ' + last.model_ms + ' ms · 播报 ' + last.playback_ms + ' ms'
+      : '本次启动后暂无当前配置的语音记录。';
   }
   const step = setupStep(config);
   $('first-setup').hidden = !step;

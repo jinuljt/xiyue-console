@@ -155,9 +155,9 @@
     </section>
     <details class="settings-panel"><summary>运行诊断</summary>
     <section class="system-card" id="voice-monitor" hidden>
-      <h2>语音链路</h2><p id="voice-state"></p><p id="voice-timing" class="muted"></p>
+      <h2>语音助手</h2><p id="voice-state"></p><p id="voice-timing" class="muted"></p>
     </section>
-    <div class="system-card"><h2>运行状态</h2><dl><dt>服务运行时间</dt><dd id="status-uptime">—</dd><dt>程序堆内存</dt><dd id="status-memory">—</dd></dl><dl id="service-status"></dl></div>
+    <div class="system-card"><h2>运行状态</h2><dl><dt>服务运行时间</dt><dd id="status-uptime">—</dd><dt>程序堆内存</dt><dd id="status-memory">—</dd></dl><div id="service-status"></div></div>
     </details>
   </section>
   <section id="usage" class="page" hidden>
@@ -209,14 +209,20 @@
 </main>
 <dialog id="room-audio-dialog" aria-labelledby="room-audio-title">
       <div class="dialog-heading"><h2 id="room-audio-title">远程听音</h2><button type="button" data-close aria-label="关闭">×</button></div>
-      <p class="muted">把同一局域网内收音设备的 WAV 音频直接播到音箱。音频仅用于实时播放。</p>
+      <p>用安卓手机上的 <strong>IP Webcam</strong> 收音，喜悦音箱实时播放。</p>
+      <ol class="muted">
+        <li>让手机和音箱连到同一网络。<a href="https://play.google.com/store/apps/details?id=com.pas.webcam" target="_blank" rel="noopener">打开 IP Webcam 下载页</a>。</li>
+        <li>打开 IP Webcam，允许使用麦克风，滑到页面底部点「启动服务器 / Start server」。</li>
+        <li>复制手机上显示的地址，后面加上 <code>/audio.wav</code>，填到下方并点「验证连接」。</li>
+      </ol>
+      <p class="muted">其他应用也可用，前提是能提供局域网 HTTP WAV 直播地址。音箱只进行实时播放。</p>
       <div class="capability-runtime">
         <div><p id="room-audio-status" role="status">正在读取状态</p><small id="room-audio-last" class="muted"></small></div>
         <button id="room-audio-play" type="button" class="primary" disabled>开始听音</button>
       </div>
       <form id="room-audio-form">
         <div class="field-grid room-audio-fields">
-          <label class="room-audio-source">收音地址<input id="room-audio-source" type="url" maxlength="500" autocomplete="off" placeholder="http://192.168.x.x:8080/audio.wav"></label>
+          <label class="room-audio-source">IP Webcam 收音地址<input id="room-audio-source" type="url" maxlength="500" autocomplete="off" placeholder="http://手机IP:端口/audio.wav"></label>
           <label>收音名称（可选）<input id="room-audio-name" type="text" maxlength="60" placeholder="例如卧室"></label>
           <label>播放音量 (%)<input id="room-audio-volume" type="number" min="0" max="100" step="1" value="70" required></label>
         </div>
