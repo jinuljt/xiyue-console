@@ -97,3 +97,23 @@
   .capability-row{grid-template-columns:minmax(0,1fr) auto;gap:8px 12px;padding:12px 14px}
   .capability-row .capability-info{grid-column:1/-1}
 }
+
+#capability-menu{display:contents}
+.desktop-table{overflow:auto;border:1px solid var(--line);border-radius:9px;background:#fff;margin-bottom:14px}
+.desktop-table table{width:100%;border-collapse:collapse;font-size:14px;text-align:left}
+.desktop-table th,.desktop-table td{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
+.desktop-table th{background:var(--pale);white-space:nowrap}
+.desktop-table tr:last-child td{border-bottom:0}
+.desktop-table td:first-child{min-width:100px;overflow-wrap:anywhere}
+.table-actions{display:flex;gap:6px;align-items:center}
+.table-actions button{white-space:nowrap;margin:0}
+.clock-form{display:flex;gap:12px;align-items:end;flex-wrap:wrap}
+.clock-form label{margin:0}
+.clock-form input,.clock-form select{margin-bottom:0;width:auto;max-width:100%}
+.clock-form input[type=number]{width:68px}
+.rule-action-row{display:grid;grid-template-columns:minmax(135px,1fr) minmax(0,1.25fr) auto;align-items:start;gap:8px;margin:8px 0}
+.rule-action-row label{margin:0}
+.rule-params{min-width:0}
+.usage-trend{margin:12px 0}
+#rule-dialog,#dialogue-detail{overflow-wrap:anywhere}
+@media(max-width:580px){.rule-action-row{grid-template-columns:1fr auto}.rule-params{order:2;grid-column:1/-1}}

@@ -8,15 +8,17 @@
     <button data-page="home" class="selected"><span>◉</span> 系统总览</button>
     <button data-page="system"><span>⚙</span> 系统配置</button>
     <button data-page="abilities"><span>✧</span> 能力中心</button>
-    <button data-page="usage"><span>▥</span> 状态与用量</button>
+    <button data-page="usage"><span>▥</span> 用量</button>
+    <button data-page="dialogues"><span>≡</span> 对话记录</button>
     <div class="nav-caption">功能运行</div>
-    <button data-page="tasks"><span>☷</span> 任务与待办</button>
+    <button data-page="tasks"><span>☷</span> 待办</button>
+    <div id="capability-menu"></div>
     <button data-page="automation"><span>◷</span> 自动化</button>
     <button id="owner-logout" type="button" hidden><span aria-hidden="true">↪</span> 退出登录</button>
   </nav>
 </aside>
 <main>
-  <header><div><h1 id="page-title">系统总览</h1><p id="page-subtitle">配置服务、管理能力，了解喜悦的运行情况。</p></div><button class="primary" id="new-task" hidden>＋ 新建任务</button></header>
+  <header><div><h1 id="page-title">系统总览</h1><p id="page-subtitle">配置服务、管理能力，了解喜悦的运行情况。</p></div><button class="primary" id="new-task" hidden>＋ 添加待办</button></header>
   <div id="connection-error" role="alert" hidden>暂时无法连接服务，页面状态可能已过期。正在重连…</div>
   <section id="home" class="page">
     <section id="first-setup" class="overview-banner" hidden>
@@ -28,7 +30,50 @@
   <section id="abilities" class="page" hidden>
     <div id="ability-list" class="capability-list"></div>
   </section>
-  <section id="tasks" class="page" hidden><div class="section-heading"><p>待办不会因提醒过就自动完成。确认、暂停和继续，都由你决定。</p></div><div id="task-list"></div><details class="task-log"><summary>任务提示记录</summary><div id="home-events" class="event-list"></div></details>
+  <section id="tasks" class="page" hidden><div class="section-heading"><p>记录要做的事，完成后标记。</p></div><div id="task-list"></div>
+  </section>
+  <section id="timers" class="page" hidden>
+    <form id="timer-form" class="settings-panel clock-form">
+      <label>名称（可选）<input name="name" maxlength="40"></label>
+      <label>小时<input name="hours" type="number" min="0" max="24" value="0" required></label>
+      <label>分钟<input name="minutes" type="number" min="0" max="59" value="5" required></label>
+      <label>秒<input name="seconds" type="number" min="0" max="59" value="0" required></label>
+      <button type="submit" class="primary">开始倒计时</button>
+    </form>
+    <div id="timer-list"></div>
+  </section>
+  <section id="alarms" class="page" hidden>
+    <form id="alarm-form" class="settings-panel clock-form">
+      <label>闹钟名称<input name="name" value="闹钟" maxlength="40" required></label>
+      <label>首次响铃时间<input name="local_time" type="datetime-local" required></label>
+      <label>重复<select name="repeat"><option value="once">一次</option><option value="daily">每天</option><option value="weekdays">工作日</option></select></label>
+      <button type="submit" id="alarm-save" class="primary">添加闹钟</button>
+      <button type="button" id="alarm-edit-cancel" class="secondary" hidden>取消编辑</button>
+    </form>
+    <div id="alarm-list"></div>
+  </section>
+  <section id="capability" class="page" hidden>
+    <div class="actions" id="custom-capability-actions"></div>
+    <div id="custom-capability-runs"></div>
+  </section>
+  <section id="automation" class="page" hidden>
+    <div class="automation-tabs" role="group" aria-label="自动化类型">
+      <button type="button" data-automation="rules" aria-pressed="true" aria-controls="automation-rules">自动化规则</button>
+      <button type="button" data-automation="flows" aria-pressed="false" aria-controls="automation-flows">手动流程</button>
+      <button type="button" data-automation="runs" aria-pressed="false" aria-controls="automation-runs">运行记录</button>
+    </div>
+    <section id="automation-rules">
+      <div class="section-heading"><p>按时间触发，可加条件并依次执行多个动作。</p><button id="new-schedule" type="button" class="secondary">＋ 新建规则</button></div>
+      <div id="rule-list"></div><details id="legacy-schedules" class="task-log" hidden><summary>既有定时计划</summary><div id="schedule-list" class="capability-list"></div></details>
+    </section>
+    <section id="automation-flows" hidden>
+      <div class="section-heading"><p>配置并运行多步流程，也可以把流程加入定时规则。</p><button id="import-ability" type="button" class="secondary">＋ 导入流程 JSON</button><input id="ability-file" type="file" accept="application/json,.json" hidden></div>
+      <div id="flow-list" class="capability-list"></div>
+    </section>
+    <section id="automation-runs" hidden>
+      <div id="rule-runs"></div>
+      <div id="flow-runs"></div>
+      <details class="task-log"><summary>执行提示</summary><div id="home-events" class="event-list"></div></details>
     <section id="external-tasks" class="settings-panel" hidden>
       <h2>外部助手任务</h2>
       <form id="external-task-form">
@@ -38,24 +83,11 @@
       </form>
       <div id="external-task-list"></div>
     </section>
-  </section>
-  <section id="automation" class="page" hidden>
-    <div class="automation-tabs" role="group" aria-label="自动化类型">
-      <button type="button" data-automation="rules" aria-pressed="true" aria-controls="automation-rules">自动化规则</button>
-      <button type="button" data-automation="flows" aria-pressed="false" aria-controls="automation-flows">手动流程</button>
-    </div>
-    <section id="automation-rules">
-      <div class="section-heading"><p>设定时间和重复方式，自动运行已启用的能力或流程。</p><button id="new-schedule" type="button" class="secondary">＋ 新建定时规则</button></div>
-      <div id="schedule-list" class="capability-list"></div>
-    </section>
-    <section id="automation-flows" hidden>
-      <div class="section-heading"><p>配置并运行多步流程，也可以把流程加入定时规则。</p><button id="import-ability" type="button" class="secondary">＋ 导入流程 JSON</button><input id="ability-file" type="file" accept="application/json,.json" hidden></div>
-      <div id="flow-list" class="capability-list"></div>
     </section>
   </section>
   <section id="system" class="page" hidden>
     <form id="settings-form">
-      <div class="settings-toolbar"><span id="settings-save-state" class="muted">正在加载配置…</span><div><button type="button" id="reload-settings" class="secondary">重新加载</button><button type="submit" class="primary">保存配置</button></div></div>
+      <div class="settings-toolbar"><span id="settings-save-state" class="muted">正在加载配置…</span><div><button type="submit" class="primary" id="save-settings" hidden>保存配置</button></div></div>
       <section class="settings-panel"><div class="panel-heading"><h2>基本设置</h2><p>查看音箱型号，设置唤醒词和计划时区。</p></div><div class="field-grid"><div><span>音箱型号</span><p id="setting-device">型号待确认</p></div><label>唤醒词<input id="setting-wake" required maxlength="48"></label><div class="timezone-picker">
         <label for="setting-timezone">计划时区</label>
         <div class="timezone-control">
@@ -117,11 +149,18 @@
       <h2>管理员账号</h2>
       <button id="owner-change" type="button" class="secondary">修改密码</button>
     </section>
-  </section>
-  <section id="usage" class="page" hidden>
+    <section class="settings-panel" id="privacy-settings">
+      <h2>隐私与记录</h2><label class="check-label"><input id="dialogue-enabled" type="checkbox">保存对话文字</label>
+      <small>开启后在音箱本机保存识别文字和回复。</small>
+    </section>
+    <details class="settings-panel"><summary>运行诊断</summary>
     <section class="system-card" id="voice-monitor" hidden>
       <h2>语音链路</h2><p id="voice-state"></p><p id="voice-timing" class="muted"></p>
     </section>
+    <div class="system-card"><h2>运行状态</h2><dl><dt>服务运行时间</dt><dd id="status-uptime">—</dd><dt>程序堆内存</dt><dd id="status-memory">—</dd></dl><dl id="service-status"></dl></div>
+    </details>
+  </section>
+  <section id="usage" class="page" hidden>
     <section class="settings-panel">
       <h2>第三方服务用量</h2>
       <p class="muted">每日汇总最多保留 90 天。计量和费用估算仅供参考，以服务商账单为准。</p>
@@ -131,10 +170,12 @@
         <label>服务商<select id="usage-provider"><option value="">所有服务商</option></select></label>
       </div>
       <div class="stats overview-stats"><article><span>调用</span><strong id="usage-requests">—</strong><small id="usage-measured"></small></article><article><span>预估费用</span><strong class="text-stat" id="usage-estimated">—</strong><small id="usage-coverage"></small></article><article><span>音频时长 / 合成字数</span><strong class="text-stat" id="usage-voice-units">—</strong><small id="usage-tokens"></small></article></div>
+      <details class="usage-trend"><summary>查看用量趋势</summary>
       <div class="activity-charts">
         <section><h3>每日预估费用</h3><label id="usage-currency-label" hidden>币种<select id="usage-currency"></select></label><div id="usage-cost-chart"></div></section>
         <section><h3>每日调用次数</h3><div id="usage-call-chart"></div><div id="usage-chart-legend" class="activity-legend"></div></section>
       </div>
+      </details>
       <p id="usage-error" class="form-error" role="alert"></p>
       <details>
         <summary>设置估算单价</summary>
@@ -157,20 +198,17 @@
       <div id="usage-history" class="usage-history"></div>
       <div class="service-actions"><button type="button" id="usage-prev" class="secondary">上一页</button><span id="usage-page"></span><button type="button" id="usage-next" class="secondary">下一页</button></div>
     </section>
-    <details class="settings-panel" id="dialogue-panel">
-      <summary>对话记录</summary>
-      <p class="muted">开启后保存最近 7 天的对话文字，最多 2 MiB。</p>
-      <label class="check-label"><input id="dialogue-enabled" type="checkbox">保存对话文字</label>
-      <div class="service-actions"><label>日期<input type="date" id="dialogue-date"></label><button type="button" id="dialogue-clear" class="secondary">清空记录</button></div>
-      <div id="dialogue-list"></div>
-      <div class="service-actions"><button type="button" id="dialogue-prev" class="secondary">上一页</button><span id="dialogue-page"></span><button type="button" id="dialogue-next" class="secondary">下一页</button></div>
-    </details>
-    <div class="system-card"><h2>运行状态</h2><dl><dt>服务运行时间</dt><dd id="status-uptime">—</dd><dt>程序堆内存</dt><dd id="status-memory">—</dd></dl><dl id="service-status"></dl></div>
+  </section>
+  <section id="dialogues" class="page" hidden>
+    <div class="section-heading"><p>保留最近 7 天，最多 2 MiB。</p><button class="secondary" type="button" data-go="settings/privacy">记录设置</button></div>
+    <div class="service-actions"><label>日期<input type="date" id="dialogue-date"></label><button type="button" id="dialogue-clear" class="secondary">清空记录</button></div>
+    <div id="dialogue-list"></div>
+    <div class="service-actions"><button type="button" id="dialogue-prev" class="secondary">上一页</button><span id="dialogue-page"></span><button type="button" id="dialogue-next" class="secondary">下一页</button></div>
   </section>
   <footer>喜悦 · 把生活的小事，认真接住。</footer>
 </main>
 <dialog id="room-audio-dialog" aria-labelledby="room-audio-title">
-      <div class="dialog-heading"><h2 id="room-audio-title">房间声音直连</h2><button type="button" data-close aria-label="关闭">×</button></div>
+      <div class="dialog-heading"><h2 id="room-audio-title">远程听音</h2><button type="button" data-close aria-label="关闭">×</button></div>
       <p class="muted">把同一局域网内收音设备的 WAV 音频直接播到音箱。音频仅用于实时播放。</p>
       <div class="capability-runtime">
         <div><p id="room-audio-status" role="status">正在读取状态</p><small id="room-audio-last" class="muted"></small></div>
@@ -179,7 +217,7 @@
       <form id="room-audio-form">
         <div class="field-grid room-audio-fields">
           <label class="room-audio-source">收音地址<input id="room-audio-source" type="url" maxlength="500" autocomplete="off" placeholder="http://192.168.x.x:8080/audio.wav"></label>
-          <label>收音名称（可选）<input id="room-audio-name" type="text" maxlength="60" placeholder="例如婴儿房"></label>
+          <label>收音名称（可选）<input id="room-audio-name" type="text" maxlength="60" placeholder="例如卧室"></label>
           <label>播放音量 (%)<input id="room-audio-volume" type="number" min="0" max="100" step="1" value="70" required></label>
         </div>
         <div class="actions">
@@ -189,7 +227,30 @@
         <p id="room-audio-check" role="status" class="muted" hidden></p>
       </form>
     </dialog>
-<dialog id="task-dialog" aria-labelledby="task-title"><form id="task-form"><div class="dialog-heading"><h2 id="task-title">创建任务</h2><button type="button" data-close aria-label="关闭">×</button></div><label>使用什么能力？<select id="task-ability" required></select></label><div id="task-fields"></div><label id="task-when-label">什么时候执行？<select id="task-when"><option value="now">现在</option><option value="once">指定时间，一次</option><option value="daily">每天</option><option value="weekdays">每个工作日</option></select></label><label id="date-label" hidden>首次执行时间<input id="task-date" type="datetime-local"></label><p class="muted" id="timezone-note"></p><p class="form-error" role="alert"></p><button class="primary" type="submit">创建</button></form></dialog>
+<dialog id="rule-dialog" aria-labelledby="rule-title">
+  <form id="rule-form">
+    <div class="dialog-heading"><h2 id="rule-title">新建自动化规则</h2><button type="button" data-close aria-label="关闭">×</button></div>
+    <label>规则名称<input name="name" maxlength="40" required></label>
+    <div class="field-grid">
+      <label>首次执行<input name="local_time" type="datetime-local" required></label>
+      <label>触发频率<select name="repeat"><option value="daily">每天</option><option value="once">一次</option><option value="weekdays">工作日</option></select></label>
+    </div>
+    <label>执行条件<select name="condition"><option value="">无条件</option><option value="room_on">远程听音已开启</option><option value="room_off">远程听音已停止</option></select></label>
+    <h3>按顺序执行</h3><div id="rule-actions"></div>
+    <button type="button" id="rule-add-action" class="secondary">＋ 添加动作</button>
+    <p id="rule-privacy-note" class="muted" hidden>这条规则可在到点时自动连接音源并在音箱播放。</p>
+    <p role="alert" class="form-error"></p>
+    <button type="submit" class="primary">保存规则</button>
+  </form>
+</dialog>
+<dialog id="task-dialog" aria-labelledby="task-title">
+  <form id="task-form"><div class="dialog-heading"><h2 id="task-title">添加待办</h2><button type="button" data-close aria-label="关闭">×</button></div>
+  <input id="task-ability" type="hidden"><div id="task-fields"></div><p class="form-error" role="alert"></p><button class="primary" type="submit">确认</button></form>
+</dialog>
+<dialog id="dialogue-detail" aria-labelledby="dialogue-detail-title">
+  <div class="dialog-heading"><h2 id="dialogue-detail-title">对话详情</h2><button type="button" data-close aria-label="关闭">×</button></div>
+  <div id="dialogue-detail-body"></div>
+</dialog>
 <dialog id="config-dialog" aria-labelledby="config-title"><form id="config-form"><div class="dialog-heading"><h2 id="config-title">能力配置</h2><button type="button" data-close aria-label="关闭">×</button></div><p id="config-description" class="muted"></p><ol id="flow-steps" class="flow-steps" hidden></ol><label class="check-label"><input id="config-enabled" type="checkbox"><span id="config-enable-label">启用此能力</span></label><div id="config-fields"></div><p class="form-error" role="alert"></p><div class="actions"><button id="config-run" type="button" class="secondary" hidden>运行流程</button><button class="primary" type="submit">保存配置</button></div></form></dialog>
 <dialog id="pair-dialog" aria-labelledby="pair-title">
   <h2 id="pair-title">登录喜悦 Voice</h2>
