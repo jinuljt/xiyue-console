@@ -197,7 +197,7 @@ function renderRoomAudioBadge(unavailable = false) {
     const stages = {stopped:'已停止', connecting:'连接中', connected:'等待音频', playing:'听音中',
       reconnecting:'重连中', paused:'暂时让行', stopping:'停止中'};
     const label = unavailable ? '状态暂不可用' : !roomAudio ? '读取中' : !roomAudio.available ? '不可用'
-      : !roomAudio.config.source ? '待配置' : stages[roomAudio.status.stage] || '状态暂不可用';
+      : !roomAudio.config.source && !roomAudio.status.running ? '待配置' : stages[roomAudio.status.stage] || '状态暂不可用';
     badge.textContent = label;
     badge.classList.toggle('paused', unavailable || !roomAudio?.status.running);
   }
@@ -237,12 +237,12 @@ function renderRoomAudio() {
   $('room-audio-save').disabled = roomAudioPending || status.running || !roomAudioDirty;
   $('room-audio-verify').disabled = roomAudioPending || status.running || !roomAudioDraft().source;
   $('room-audio-play').disabled = roomAudioPending || status.stage === 'stopping' ||
-    (!status.running && (!available || !config.source || roomAudioDirty));
+    (!status.running && (!available || !draft.source));
   $('room-audio-play').textContent = status.running ? '停止听音' : '开始听音';
   const labels = {stopped: '已停止', connecting: '正在连接收音设备', connected: '已连接，等待音频数据',
     playing: '正在向音箱送音', reconnecting: '音频流中断或不可用，正在重连',
     paused: '已让行，等待音箱空闲', stopping: '正在停止'};
-  const label = available ? [config.name, labels[status.stage] || '状态暂不可用', status.problem].filter(Boolean).join(' · ')
+  const label = available ? [status.running ? status.name : config.name, labels[status.stage] || '状态暂不可用', status.problem].filter(Boolean).join(' · ')
     : '此设备没有可用的本地播放入口';
   if ($('room-audio-status').textContent !== label) $('room-audio-status').textContent = label;
   $('room-audio-last').textContent = status.last_audio_at
@@ -290,10 +290,14 @@ $('room-audio-verify').addEventListener('click', () => handle(() => roomAudioAct
     check.textContent = e.message;
   }
 })));
-$('room-audio-play').addEventListener('click', () => handle(() => roomAudioAction(async () => {
+$('room-audio-play').addEventListener('click', () => handle(() => {
   const action = roomAudio.status.running ? 'stop' : 'start';
-  roomAudio.status = await api(`/api/room-audio/${action}`, 'POST', {});
-})));
+  if (action === 'start' && !$('room-audio-form').reportValidity()) return;
+  const body = action === 'start' ? {config: roomAudioDraft()} : {};
+  return roomAudioAction(async () => {
+    roomAudio.status = await api(`/api/room-audio/${action}`, 'POST', body);
+  });
+}));
 function renderSchedules() {
   const existing=state.schedules.filter(sc=>!sc.alarm_name && sc.ability_id!=='quick-timer');
   $('legacy-schedules').hidden=!existing.length;
