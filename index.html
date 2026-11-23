@@ -8,6 +8,7 @@
     <button data-page="home" class="selected"><span>◉</span> 系统总览</button>
     <button data-page="system"><span>⚙</span> 系统配置</button>
     <button data-page="abilities"><span>✧</span> 能力中心</button>
+    <button data-page="device-status"><span aria-hidden="true">◈</span> 设备状态</button>
     <button data-page="usage"><span>▥</span> 用量</button>
     <button data-page="dialogues"><span>≡</span> 对话记录</button>
     <div class="nav-caption">功能运行</div>
@@ -153,12 +154,13 @@
       <h2>隐私与记录</h2><label class="check-label"><input id="dialogue-enabled" type="checkbox">保存对话文字</label>
       <small>开启后在音箱本机保存识别文字和回复。</small>
     </section>
-    <details class="settings-panel"><summary>运行诊断</summary>
-    <section class="system-card" id="voice-monitor" hidden>
+  </section>
+  <section id="device-status" class="page" hidden>
+    <section class="settings-panel" id="voice-monitor" hidden>
       <h2>语音助手</h2><p id="voice-state"></p><p id="voice-timing" class="muted"></p>
     </section>
-    <div class="system-card"><h2>运行状态</h2><dl><dt>服务运行时间</dt><dd id="status-uptime">—</dd><dt>程序堆内存</dt><dd id="status-memory">—</dd></dl><div id="service-status"></div></div>
-    </details>
+    <section class="settings-panel"><h2>服务状态</h2><div id="service-status"></div></section>
+    <section class="system-card"><h2>运行信息</h2><dl><dt>服务运行时间</dt><dd id="status-uptime">—</dd><dt>程序堆内存</dt><dd id="status-memory">—</dd></dl></section>
   </section>
   <section id="usage" class="page" hidden>
     <section class="settings-panel">

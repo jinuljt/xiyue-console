@@ -18,6 +18,7 @@ const titles = {
   home: ['系统总览', '配置服务、管理能力，了解喜悦的运行情况。'],
   system: ['系统配置', '选择语音与模型服务，配置外部 Agent 和基础设置。'],
   abilities: ['能力中心', '查看和配置音箱提供的能力。'],
+  'device-status': ['设备状态', '查看语音助手当前状态和服务最近一次调用结果。'],
   usage: ['用量', '查看第三方服务调用和费用估算。'],
   dialogues: ['对话记录', '按日期查看语音对话。'],
   tasks: ['待办', '记录和完成要做的事。'],
@@ -169,7 +170,10 @@ function renderCapabilityMenus(custom) {
     if (enabled) routes.push(['capability/'+manifest.id,manifest.name]);
   }
   const links = routes.map(([route,name]) => {
-    const link = button(name,()=>{location.hash=route;});
+    const link = button('',()=>{location.hash=route;});
+    const icon = el('span', {timers:'⏱︎', alarms:'⏰︎'}[route] || '✧');
+    icon.setAttribute('aria-hidden','true');
+    link.append(icon, document.createTextNode(' ' + name));
     link.dataset.page=route;
     link.classList.toggle('selected',location.hash==='#'+route);
     return link;
