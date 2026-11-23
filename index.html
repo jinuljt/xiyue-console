@@ -228,6 +228,12 @@
           <label>收音名称（可选）<input id="room-audio-name" type="text" maxlength="60" placeholder="例如卧室"></label>
           <label>播放音量 (%)<input id="room-audio-volume" type="number" min="0" max="100" step="1" value="70" required></label>
         </div>
+        <details id="room-audio-login">
+          <summary>IP Webcam 用户名和密码（可选）</summary>
+          <label>用户名<input id="room-audio-username" type="text" maxlength="128" autocomplete="off"></label>
+          <label>密码<input id="room-audio-password" type="password" maxlength="1024" autocomplete="new-password"></label>
+          <small id="room-audio-auth-note" class="muted">在 IP Webcam 开启访问密码时填写。更换地址或用户名后，请重新输入密码。</small>
+        </details>
         <div class="actions">
           <button id="room-audio-save" type="submit" class="secondary" disabled>保存</button>
           <button id="room-audio-verify" type="button" class="secondary" disabled>验证连接</button>

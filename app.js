@@ -213,7 +213,8 @@ async function openRoomAudio() {
 }
 function roomAudioDraft() {
   return {name: $('room-audio-name').value.trim(), source: $('room-audio-source').value.trim(),
-    volume: $('room-audio-volume').valueAsNumber};
+    volume: $('room-audio-volume').valueAsNumber, username: $('room-audio-username').value.trim(),
+    password: $('room-audio-password').value};
 }
 function renderRoomAudio() {
   renderRoomAudioBadge();
@@ -223,8 +224,16 @@ function renderRoomAudio() {
     $('room-audio-name').value = config.name || '';
     $('room-audio-source').value = config.source;
     $('room-audio-volume').value = config.volume;
+    $('room-audio-username').value = config.username || '';
+    $('room-audio-password').value = '';
   }
-  $('room-audio-name').disabled = $('room-audio-source').disabled = $('room-audio-volume').disabled = status.running;
+  for (const field of ['name','source','volume','username','password']) $('room-audio-'+field).disabled = status.running || roomAudioPending;
+  const draft = roomAudioDraft();
+  const savedPassword = roomAudio.password_configured && draft.source === config.source && draft.username === config.username;
+  $('room-audio-password').placeholder = savedPassword ? '已保存，留空沿用' : '';
+  $('room-audio-auth-note').textContent = savedPassword
+    ? '留空沿用已保存的密码。清空用户名并保存可取消登录。'
+    : '按 IP Webcam 中设置的用户名和密码填写。更换地址或用户名后，请重新输入密码。';
   $('room-audio-save').disabled = roomAudioPending || status.running || !roomAudioDirty;
   $('room-audio-verify').disabled = roomAudioPending || status.running || !roomAudioDraft().source;
   $('room-audio-play').disabled = roomAudioPending || status.stage === 'stopping' ||
@@ -233,7 +242,7 @@ function renderRoomAudio() {
   const labels = {stopped: '已停止', connecting: '正在连接收音设备', connected: '已连接，等待音频数据',
     playing: '正在向音箱送音', reconnecting: '音频流中断或不可用，正在重连',
     paused: '已让行，等待音箱空闲', stopping: '正在停止'};
-  const label = available ? [config.name, labels[status.stage] || '状态暂不可用'].filter(Boolean).join(' · ')
+  const label = available ? [config.name, labels[status.stage] || '状态暂不可用', status.problem].filter(Boolean).join(' · ')
     : '此设备没有可用的本地播放入口';
   if ($('room-audio-status').textContent !== label) $('room-audio-status').textContent = label;
   $('room-audio-last').textContent = status.last_audio_at
@@ -264,8 +273,7 @@ $('room-audio-form').addEventListener('submit', event => {
   handle(() => roomAudioAction(async () => {
     const submitted = roomAudioDraft();
     await api('/api/room-audio', 'PUT', submitted);
-    const latest = roomAudioDraft();
-    if (latest.name === submitted.name && latest.source === submitted.source && latest.volume === submitted.volume) roomAudioDirty = false;
+    roomAudioDirty = false;
     await loadRoomAudio();
     toast('远程听音设置已保存');
   }));
@@ -551,6 +559,7 @@ async function refreshConsole() {
       roomAudioDirty = false;
       $('room-audio-source').value = '';
       $('room-audio-name').value = '';
+      $('room-audio-username').value = $('room-audio-password').value = '';
       $('room-audio-check').hidden = true;
       if ($('room-audio-dialog').open) $('room-audio-dialog').close();
       $('device-login').hidden = !session.device_voice && !session.device_button;
