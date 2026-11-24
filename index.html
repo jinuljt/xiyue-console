@@ -86,7 +86,17 @@
       <button type="button" data-automation="runs" aria-pressed="false" aria-controls="automation-runs">运行记录</button>
     </div>
     <section id="automation-rules">
-      <div class="section-heading"><p><a href="/help.html#automation">查看自动化指南</a></p><div class="actions"><button id="import-ability" type="button" class="secondary">导入流程</button><input id="ability-file" type="file" accept="application/json,.json" hidden><button id="new-schedule" type="button" class="primary">＋ 新建自动化</button></div></div>
+      <div class="section-heading"><p><a href="/help.html#automation">查看自动化指南</a></p><div class="actions rule-list-actions">
+        <button id="import-ability" type="button" class="secondary">导入流程</button><input id="ability-file" type="file" accept="application/json,.json" hidden>
+        <details id="rule-examples" class="rule-examples">
+          <summary class="secondary">使用示例</summary>
+          <div class="rule-example-options">
+            <button type="button" data-rule-example="break"><strong>休息 1 分钟</strong><small>提醒活动，1 分钟后提示结束</small></button>
+            <button type="button" data-rule-example="pomodoro"><strong>番茄工作法</strong><small>专注 25 分钟，休息 5 分钟</small></button>
+          </div>
+        </details>
+        <button id="new-schedule" type="button" class="primary">＋ 新建自动化</button>
+      </div></div>
       <div id="rule-list"></div>
     </section>
     <section id="automation-runs" hidden>
@@ -102,6 +112,55 @@
       <div id="external-task-list"></div>
     </section>
     </section>
+  </section>
+  <section id="automation-editor" class="page" hidden>
+    <form id="rule-form">
+      <div class="settings-panel rule-editor-name">
+        <a href="#automation">← 返回自动化</a>
+        <h2 id="rule-title" tabindex="-1">新建自动化</h2>
+        <p id="rule-import-note" class="muted" hidden></p>
+        <label>流程名称<input name="name" maxlength="40" required></label>
+      </div>
+      <div class="rule-editor-layout">
+        <div class="settings-panel rule-outline">
+          <div id="rule-trigger-slot" class="rule-outline-group">
+            <button type="button" class="rule-part" id="rule-trigger-button" aria-controls="rule-trigger-panel" aria-expanded="false"><strong>触发</strong><small id="rule-trigger-summary"></small></button>
+            <section id="rule-trigger-panel" class="rule-part-panel" hidden>
+              <h3>触发方式</h3>
+    <label>触发方式<select name="trigger"><option value="manual">手动运行</option><option value="schedule">到指定时间</option><option value="entity">Home Assistant 设备状态变化</option></select></label>
+    <div class="field-grid" id="rule-schedule-fields" hidden>
+      <label>首次执行<input name="local_time" type="datetime-local"></label>
+      <label>重复<select name="repeat"><option value="daily">每天</option><option value="once">一次</option><option value="weekdays">工作日</option></select></label>
+    </div>
+    <div id="rule-entity-fields" hidden>
+      <label>读取设备状态的工具<select name="entity_tool"></select></label>
+      <p id="rule-entity-note" class="muted" hidden>请在能力中心配置 Home Assistant，添加「读取状态」实体工具并勾选「允许自动化调用」。系统约每 10 秒读取一次状态。</p>
+      <label>变为此状态时触发<input name="to_state" maxlength="80" placeholder="例如 on"></label>
+    </div>
+            </section>
+          </div>
+          <div id="rule-condition-slot" class="rule-outline-group">
+            <button type="button" class="rule-part" id="rule-condition-button" aria-controls="rule-condition-panel" aria-expanded="false"><strong>条件 <span class="muted">（可选）</span></strong><small id="rule-condition-summary"></small></button>
+            <section id="rule-condition-panel" class="rule-part-panel" hidden>
+              <h3>执行条件</h3>
+    <label>远程听音状态<select name="condition"><option value="">任意</option><option value="room_on">已开启</option><option value="room_off">已停止</option></select></label>
+    <label class="check-label"><input id="rule-use-hours" type="checkbox">只在指定时段执行</label>
+    <div class="field-grid" id="rule-hours" hidden>
+      <label>时段开始<input name="after" type="time"></label>
+      <label>时段结束<input name="before" type="time"></label>
+    </div>
+            </section>
+          </div>
+          <div class="rule-steps-heading"><h3>执行步骤</h3><button type="button" id="rule-add-action" class="secondary">＋ 添加步骤</button></div>
+          <ol id="rule-actions"></ol>
+        </div>
+        <div class="settings-panel rule-detail" id="rule-detail"></div>
+      </div>
+      <p id="rule-privacy-note" class="muted" hidden>流程可自动连接音源并在音箱播放。听音会持续到手动或通过流程停止。</p>
+      <div id="rule-preview" class="settings-panel" hidden aria-live="polite"></div>
+      <p role="alert" class="form-error"></p>
+      <div class="rule-editor-footer"><button type="button" id="rule-preview-button" class="secondary">预览</button><button type="submit" class="primary">保存自动化</button></div>
+    </form>
   </section>
   <section id="system" class="page" hidden>
     <div class="settings-surface">
@@ -302,36 +361,6 @@
         <p id="room-audio-check" role="status" class="muted" hidden></p>
       </form>
     </dialog>
-<dialog id="rule-dialog" class="drawer" aria-labelledby="rule-title">
-  <form id="rule-form">
-    <div class="dialog-heading"><h2 id="rule-title">新建自动化</h2><button type="button" data-close aria-label="关闭">×</button></div><p id="rule-import-note" class="muted" hidden></p>
-    <label>名称<input name="name" maxlength="40" required></label>
-    <h3>触发</h3>
-    <label>触发方式<select name="trigger"><option value="manual">手动运行</option><option value="schedule">到指定时间</option><option value="entity">Home Assistant 设备状态变化</option></select></label>
-    <div class="field-grid" id="rule-schedule-fields" hidden>
-      <label>首次执行<input name="local_time" type="datetime-local"></label>
-      <label>重复<select name="repeat"><option value="daily">每天</option><option value="once">一次</option><option value="weekdays">工作日</option></select></label>
-    </div>
-    <div id="rule-entity-fields" hidden>
-      <label>读取设备状态的工具<select name="entity_tool"></select></label>
-      <p id="rule-entity-note" class="muted" hidden>请在能力中心配置 Home Assistant，添加「读取状态」实体工具并勾选「允许自动化调用」。系统约每 10 秒读取一次状态。</p>
-      <label>变为此状态时触发<input name="to_state" maxlength="80" placeholder="例如 on"></label>
-    </div>
-    <h3>条件（可选）</h3>
-    <label>远程听音状态<select name="condition"><option value="">任意</option><option value="room_on">已开启</option><option value="room_off">已停止</option></select></label>
-    <label class="check-label"><input id="rule-use-hours" type="checkbox">只在指定时段执行</label>
-    <div class="field-grid" id="rule-hours" hidden>
-      <label>时段开始<input name="after" type="time"></label>
-      <label>时段结束<input name="before" type="time"></label>
-    </div>
-    <h3>执行步骤</h3><ol id="rule-actions"></ol>
-    <button type="button" id="rule-add-action" class="secondary">＋ 添加步骤</button>
-    <p id="rule-privacy-note" class="muted" hidden>流程可自动连接音源并在音箱播放。听音会持续到手动或通过流程停止。</p>
-    <div id="rule-preview" hidden aria-live="polite"></div>
-    <p role="alert" class="form-error"></p>
-    <div class="actions"><button type="button" id="rule-preview-button" class="secondary">预览</button><button type="submit" class="primary">保存自动化</button></div>
-  </form>
-</dialog>
 <dialog id="rule-run-dialog" class="drawer" aria-labelledby="rule-run-title">
   <div class="dialog-heading"><h2 id="rule-run-title">执行详情</h2><button type="button" data-close aria-label="关闭">×</button></div>
   <div id="rule-run-body" aria-live="polite"></div>

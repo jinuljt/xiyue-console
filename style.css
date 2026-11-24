@@ -202,7 +202,7 @@ dialog.drawer .dialog-heading { position: sticky; z-index: 2; top: 0; padding: 1
 dialog.drawer > form:only-child { display: flex; flex-direction: column; min-height: 100%; }
 dialog.drawer > form:only-child > :is(.actions, .drawer-footer) { margin-top: auto; padding-top: 12px; }
 dialog.drawer .field-grid { grid-template-columns: 1fr; }
-#rule-dialog, #dialogue-detail { overflow-wrap: anywhere; }
+#dialogue-detail { overflow-wrap: anywhere; }
 #room-audio-dialog ol { padding-left: 20px; }
 #ha-tool-list:not(:empty) { margin-block: 12px; }
 #ha-tool-list .capability-table th:nth-child(2), #ha-tool-list .capability-table td:nth-child(2) { width: auto; }
@@ -249,13 +249,39 @@ dialog.drawer .field-grid { grid-template-columns: 1fr; }
 .clock-form label { margin: 0; }
 .clock-form input, .clock-form select { width: auto; }
 .clock-form input[type="number"] { width: 66px; }
-#rule-actions { margin: 0; padding-inline-start: 22px; }
-.rule-action-row { border: 1px solid var(--line); border-radius: var(--radius); padding: 10px; margin-block: 8px; }
-.rule-step-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
-.rule-step-heading select { flex: 1; min-width: 140px; }
-.rule-step-heading .table-actions { margin: 0; }
-.rule-params:not(:empty) { display: grid; gap: 8px; margin-top: 10px; }
-.rule-action-row label { margin: 0; }
+/* Automation editor */
+.rule-list-actions { margin-top: 0; }
+.rule-examples { position: relative; }
+.rule-examples > summary { display: flex; align-items: center; min-height: 32px; padding: 5px 11px; border: 1px solid var(--control); border-radius: var(--radius); cursor: pointer; }
+.rule-examples > summary::after { content: "▾"; margin-inline-start: 7px; }
+.rule-example-options { position: absolute; z-index: 2; inset-block-start: calc(100% + 5px); inset-inline-end: 0; width: max-content; min-width: 196px; padding: 5px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 20px #18243619; }
+.rule-example-options button { display: grid; width: 100%; text-align: start; }
+.rule-example-options button:hover { background: var(--pale); }
+.rule-example-options small { color: var(--muted); }
+.rule-editor-name :is(h2,label) { margin-top: 8px; }
+.rule-editor-name label { max-width: 440px; margin-bottom: 0; }
+.rule-editor-layout { display: grid; grid-template-columns: minmax(245px,.8fr) minmax(0,1.2fr); align-items: start; gap: 16px; }
+.rule-outline-group + .rule-outline-group, .rule-action-row + .rule-action-row { margin-top: 6px; }
+.rule-steps-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-block: 16px 8px; }
+#rule-actions { list-style: none; margin: 0; padding: 0; }
+.rule-part { display: grid; gap: 2px; width: 100%; min-width: 0; padding: 9px 11px; text-align: start; background: var(--surface); border: 1px solid var(--line); }
+.rule-part small { color: var(--muted); overflow-wrap: anywhere; }
+.rule-part small:empty { display: none; }
+.rule-part:hover { border-color: var(--primary); }
+.rule-part[aria-expanded="true"] { border-color: var(--primary); color: var(--primary); background: var(--pale); }
+.rule-detail { position: sticky; top: 16px; max-height: calc(100dvh - 32px); overflow: auto; }
+.rule-part-panel { min-width: 0; }
+.rule-part-panel > h3 { margin-bottom: 10px; }
+.rule-part-panel .table-actions { margin-top: 14px; }
+.rule-duration { display: grid; grid-template-columns: minmax(0,1fr) minmax(80px,112px); gap: 10px; }
+.rule-editor-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+#rule-privacy-note { margin-bottom: 12px; }
+@media (max-width: 920px) {
+  .rule-editor-layout { grid-template-columns: minmax(0,1fr); gap: 0; }
+  .rule-detail { display: none; }
+  .rule-outline .rule-part-panel { padding: 12px 10px 10px; border: 1px solid var(--line); border-top: 0; }
+}
+@media (max-width: 430px) { .rule-example-options { inset-inline: 0 auto; } }
 .automation-preview-list { padding-inline-start: 24px; }
 .automation-preview-list li + li { margin-top: 8px; }
 
