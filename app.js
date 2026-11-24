@@ -1386,8 +1386,8 @@ function updateDialogueOptions() {
     if (id==='zh') return '';
     if (external) return '当前为仅外部 Agent 模式';
     const unavailable = [];
-    if (!asr.includes(id)) unavailable.push('识别不支持');
-    if (!allTTS.has(id)) unavailable.push('播报不支持');
+    if (!asr.includes(id)) unavailable.push('当前识别不支持');
+    if (!allTTS.has(id)) unavailable.push('当前播报不支持');
     return unavailable.join('、');
   };
   language.replaceChildren(...dialogueCatalog.languages.map(item=>{
@@ -1424,6 +1424,89 @@ function updateDialogueOptions() {
   choice.setCustomValidity(provider==='doubao' && unsupported && !reason(language.value) ? '请选择支持此语言的豆包音色' : '');
   $('dialogue-probe').disabled = dialogueProbeRunning || external || Boolean(reason(language.value)) || unsupported;
   $('tts-verify').disabled = unsupported;
+  renderDialogueGuide();
+}
+
+function renderDialogueGuide() {
+  if (!dialogueCatalog || !savedSettings) return;
+  const target = $('dialogue-guide-language');
+  if (target.options.length === 0) {
+    target.append(new Option('选择语言',''),...dialogueCatalog.languages.filter(item=>item.id!=='zh')
+      .map(item=>new Option(item.name,item.id)));
+  }
+  const language = target.value;
+  const output = $('dialogue-guide-steps');
+  output.replaceChildren();
+  if (!language) return;
+
+  const name = target.selectedOptions[0].textContent;
+  if (savedSettings.mode==='external') {
+    output.append(el('p','在大模型设置中选择直连大模型或混合模式，再配置'+name+'对话。'),
+      button('去配置大模型',()=>{location.hash='settings/model';},'secondary'));
+    return;
+  }
+  const asr = $('asr-provider');
+  const matchingASR = [...asr.options].filter(option=>dialogueCatalog.asr[option.value]?.includes(language));
+  if (!matchingASR.length) {
+    output.append(el('p','喜悦暂未接入支持'+name+'的识别接口，此语言暂无法开启。'));
+    return;
+  }
+  const actions = el('div',undefined,'service-actions');
+  const step = (message, label, field, guide) => {
+    output.append(el('p',message));
+    actions.append(button(label,() => $(field).focus(),'secondary'));
+    if (guide) {
+      const link=el('a','查看 SenseVoice 搭建指南');
+      link.href='/help.html#asr-sensevoice';
+      actions.append(link);
+    }
+  };
+  const keyReady = (service, provider) => Boolean($(service+'-key').value.trim()) ||
+    (!$(service+'-clear').checked && savedSettings[service].provider===provider && savedSettings[service].key_configured);
+  const hasASR = matchingASR.some(option=>option.value===asr.value);
+  if (!hasASR) {
+    step('把语音识别改为 '+matchingASR.map(option=>option.textContent).join('或')+'，然后填写连接信息。',
+      '去配置识别','asr-provider',matchingASR.some(option=>option.value==='sensevoice'));
+  } else if (asr.value==='sensevoice' && !$('asr-endpoint').value.trim()) {
+    step('填写 SenseVoice 服务地址。','填写服务地址','asr-endpoint',true);
+  } else if (asr.value==='sensevoice' && savedSettings.asr.provider==='sensevoice' &&
+      savedSettings.asr.key_configured && $('asr-endpoint').value.trim()!==savedSettings.asr.endpoint &&
+      !$('asr-key').value.trim() && !$('asr-clear').checked) {
+    step('SenseVoice 地址已更改，请填写新地址的凭证，或清除旧凭证。','去配置识别凭证','asr-key');
+  } else if (asr.value==='doubao' && !keyReady('asr','doubao')) {
+    step('填写豆包语音识别 API Key。','填写识别密钥','asr-key');
+  }
+
+  const tts = $('tts-provider');
+  const matchingTTS = [...tts.options].flatMap(option=>{
+    const provider=option.value;
+    const voice=dialogueCatalog.presets[provider]?.find(preset=>
+      (dialogueCatalog.voices[provider]?.[preset.id] || dialogueCatalog.tts[provider] || []).includes(language));
+    return voice?[{provider, label:option.textContent+'「'+voice.name+'」'}]:[];
+  });
+  if (!matchingTTS.length) {
+    output.append(el('p','喜悦暂未接入支持'+name+'的播报音色。'));
+  } else if (!matchingTTS.some(option=>option.provider===tts.value)) {
+    step('把语音合成改为 '+matchingTTS.map(option=>option.label).join('，或选用')+'，然后填写对应的 API Key。',
+      '去配置播报','tts-provider');
+  } else if (!keyReady('tts',tts.value)) {
+    step('填写所选播报服务的 API Key。','填写播报密钥','tts-key');
+  }
+
+  if (!output.children.length) {
+    output.append(el('p','可以选择'+name+'对话。先试说一句，再保存语音设置。'));
+    actions.append(button('用'+name+'试说',()=>{
+      const selection=$('dialogue-language');
+      selection.value=language;
+      selection.dispatchEvent(new Event('change',{bubbles:true}));
+      $('dialogue-probe').click();
+    },'secondary'));
+  }
+  if (actions.children.length) output.append(actions);
+}
+$('dialogue-guide-language').addEventListener('change',renderDialogueGuide);
+for (const id of ['asr-endpoint','asr-key','asr-clear','tts-key','tts-clear']) {
+  $(id).addEventListener('input',renderDialogueGuide);
 }
 $('tts-provider').addEventListener('change', updateTTSFields);
 for (const id of ['dialogue-language','tts-voice-preset','tts-deepseek-voice','tts-voice']) {
@@ -1762,7 +1845,7 @@ function updateSettingsSaveBars() {
 for (const scope of ['device','voice','model']) {
   const form = $(`settings-${scope}-form`);
   function markDirty(event) {
-    if ((event.target === timezoneInput && event.type==='input')) return;
+    if ((event.target === timezoneInput && event.type==='input') || event.target.id==='dialogue-guide-language') return;
     settingsDirty.add(scope);
     settingsEditCount[scope]=(settingsEditCount[scope]||0)+1;
     updateSettingsSaveBars();
