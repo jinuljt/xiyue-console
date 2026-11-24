@@ -27,9 +27,21 @@
       <button id="setup-action" type="button" class="primary">配置大模型</button>
     </section>
     <div class="stats overview-stats"><article><span>音箱型号</span><strong class="text-stat" id="device-name">—</strong><small id="runtime-version"></small></article><article><span>任务运行服务</span><strong class="text-stat" id="runtime-state">连接中</strong><small id="runtime-uptime">正在读取实时状态</small></article><article><span>已启用能力</span><strong id="stat-abilities">—</strong><small>在能力中心中查看与配置</small></article></div>
+    <section class="settings-panel">
+      <div class="section-heading"><h2>第三方用量</h2><a href="#usage">查看用量明细</a></div>
+      <div class="stats overview-stats">
+        <article><span>今日调用</span><strong id="home-usage-calls">—</strong></article>
+        <article><span>本月费用估算</span><strong class="text-stat" id="home-usage-cost">—</strong><small id="home-usage-coverage">仅供参考，以服务商账单为准</small></article>
+      </div>
+    </section>
   </section>
   <section id="abilities" class="page" hidden>
     <div id="ability-list" class="capability-list"></div>
+    <section class="settings-panel">
+      <div class="section-heading"><h2>连接与工具</h2></div>
+      <div class="actions"><button id="ha-open" class="secondary" type="button">Home Assistant</button><button id="http-open" class="secondary" type="button">添加自定义 HTTP 工具</button></div>
+      <div id="network-tool-list"></div>
+    </section>
   </section>
   <section id="tasks" class="page" hidden><div class="section-heading"><p>记录要做的事，完成后标记。</p></div><div id="task-list"></div>
   </section>
@@ -146,6 +158,14 @@
       </details>
       <p class="form-error" id="settings-error" role="alert"></p>
     </form>
+    <form id="search-form" class="settings-panel">
+      <div class="panel-heading"><h2>网页搜索</h2><p>查询近期信息或读取公开网页。使用 DeepSeek 独立搜索接口，适用于音箱的大模型直连模式及混合模式的本地对话。成功且有结果的调用按次计费。</p></div>
+      <label class="check-label"><input name="enabled" type="checkbox">启用 DeepSeek 网页搜索</label>
+      <label class="check-label"><input name="reuse" type="checkbox">使用已保存的官方 DeepSeek 大模型凭证</label>
+      <label id="search-key-label">DeepSeek 搜索 API Key<input name="api_key" type="password" autocomplete="new-password" maxlength="8192"><small id="search-key-status"></small></label>
+      <div class="service-actions"><a href="/help.html#network-tools">查看配置指南</a><button id="search-test" type="button" class="secondary">验证</button><button class="primary" type="submit">保存搜索配置</button></div>
+      <p id="search-result" role="status"></p>
+    </form>
     <section id="owner-management" class="settings-panel" hidden>
       <h2>管理员账号</h2>
       <button id="owner-change" type="button" class="secondary">修改密码</button>
@@ -168,7 +188,7 @@
       <p class="muted">每日汇总最多保留 90 天。计量和费用估算仅供参考，以服务商账单为准。</p>
       <div class="activity-filters">
         <label>时间<select id="usage-days"><option value="7">最近 7 天</option><option value="30" selected>最近 30 天</option><option value="90">最近 90 天</option></select></label>
-        <label>类型<select id="usage-type"><option value="">所有类型</option><option value="asr">语音识别</option><option value="llm">大模型</option><option value="tts">语音合成</option><option value="external">外部 Agent</option><option value="ability">付费能力</option></select></label>
+        <label>类型<select id="usage-type"><option value="">所有类型</option><option value="asr">语音识别</option><option value="llm">大模型</option><option value="tts">语音合成</option><option value="external">外部 Agent</option><option value="ability">付费能力</option><option value="search">网页搜索</option></select></label>
         <label>服务商<select id="usage-provider"><option value="">所有服务商</option></select></label>
       </div>
       <div class="stats overview-stats"><article><span>调用</span><strong id="usage-requests">—</strong><small id="usage-measured"></small></article><article><span>预估费用</span><strong class="text-stat" id="usage-estimated">—</strong><small id="usage-coverage"></small></article><article><span>音频时长 / 合成字数</span><strong class="text-stat" id="usage-voice-units">—</strong><small id="usage-tokens"></small></article></div>
@@ -265,6 +285,41 @@
 <dialog id="dialogue-detail" aria-labelledby="dialogue-detail-title">
   <div class="dialog-heading"><h2 id="dialogue-detail-title">对话详情</h2><button type="button" data-close aria-label="关闭">×</button></div>
   <div id="dialogue-detail-body"></div>
+</dialog>
+<dialog id="ha-dialog" aria-labelledby="ha-title">
+  <div class="dialog-heading"><h2 id="ha-title">Home Assistant</h2><button type="button" data-close aria-label="关闭">×</button></div>
+  <p>在 Home Assistant 的个人资料页创建长期访问令牌。保存连接后，选择喜悦可以使用的实体。</p>
+  <form id="ha-connection-form">
+    <label>服务地址<input name="endpoint" type="url" required placeholder="http://192.168.1.20:8123"></label>
+    <label>长期访问令牌<input name="api_key" type="password" autocomplete="new-password"><small id="ha-key-status"></small></label>
+    <div class="actions"><button class="secondary" type="submit">保存连接</button><button id="ha-reload" class="secondary" type="button">读取实体</button></div>
+    <p id="ha-connection-status" role="status"></p>
+  </form>
+  <form id="ha-tool-form" hidden>
+    <label>实体<select name="entity" required></select></label>
+    <label>操作<select name="operation"><option value="state">读取状态</option><option value="turn_on">开启</option><option value="turn_off">关闭</option></select></label>
+    <label>工具名称<input name="name" maxlength="40" required></label>
+    <label class="check-label"><input type="checkbox" name="voice">允许语音查询</label>
+    <label class="check-label"><input type="checkbox" name="automation">可作为自动化动作</label>
+    <p id="ha-tool-status" role="status"></p>
+    <div class="actions"><button class="primary" type="submit">保存实体工具</button></div>
+  </form>
+</dialog>
+<dialog id="http-dialog" aria-labelledby="http-title">
+  <form id="http-tool-form">
+    <div class="dialog-heading"><h2 id="http-title">自定义 HTTP 工具</h2><button type="button" data-close aria-label="关闭">×</button></div>
+    <label>名称<input name="name" maxlength="40" required placeholder="例如：查询空气质量"></label>
+    <label>用途说明<input name="description" maxlength="165" required placeholder="告诉喜悦何时调用、参数代表什么"></label>
+    <div class="field-grid"><label>请求方法<select name="method"><option>GET</option><option>POST</option></select></label><label>固定请求地址<input name="endpoint" type="url" required placeholder="https://example.com/api/air"></label></div>
+    <label>Bearer Token（可选）<input name="api_key" type="password" autocomplete="new-password"><small id="http-key-status"></small></label>
+    <label class="check-label" id="http-clear-label" hidden><input name="clear_key" type="checkbox">清除已保存的凭证</label>
+    <label>返回字段（可选）<input name="extract" placeholder="例如 data.aqi"><small>填写 JSON 字段路径。留空时读取响应正文。</small></label>
+    <fieldset><legend>调用参数</legend><div id="http-params"></div><button id="http-add-param" type="button" class="secondary">添加参数</button></fieldset>
+    <label class="check-label"><input name="voice" type="checkbox">允许语音调用（GET）</label>
+    <label class="check-label"><input name="automation" type="checkbox">可作为自动化动作</label>
+    <div class="actions"><button class="secondary" id="http-test" type="button">试运行</button><button class="primary" type="submit">保存工具</button></div>
+    <pre id="http-result" class="network-result" role="status" hidden></pre>
+  </form>
 </dialog>
 <dialog id="config-dialog" aria-labelledby="config-title"><form id="config-form"><div class="dialog-heading"><h2 id="config-title">能力配置</h2><button type="button" data-close aria-label="关闭">×</button></div><p id="config-description" class="muted"></p><ol id="flow-steps" class="flow-steps" hidden></ol><label class="check-label"><input id="config-enabled" type="checkbox"><span id="config-enable-label">启用此能力</span></label><div id="config-fields"></div><p class="form-error" role="alert"></p><div class="actions"><button id="config-run" type="button" class="secondary" hidden>运行流程</button><button class="primary" type="submit">保存配置</button></div></form></dialog>
 <dialog id="pair-dialog" aria-labelledby="pair-title">

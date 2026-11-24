@@ -398,7 +398,7 @@ $('alarm-form').addEventListener('submit',event=>{
 $('alarm-edit-cancel').addEventListener('click',()=>editAlarm());
 
 const repeatNames={once:'一次',daily:'每天',weekdays:'工作日'};
-const ruleActions={room_start:'开始远程听音',room_stop:'停止远程听音',speak:'播报文字',timer:'启动倒计时',flow:'运行已启用的流程'};
+const ruleActions={room_start:'开始远程听音',room_stop:'停止远程听音',speak:'播报文字',timer:'启动倒计时',flow:'运行已启用的流程',http_tool:'调用连接工具'};
 const ruleResults={running:'运行中',completed:'已执行',failed:'失败',skipped:'已跳过',interrupted:'已中断'};
 function renderAutomation() {
   const rules=state.rules||[];
@@ -465,6 +465,29 @@ function appendRuleAction(step) {
       seconds.name='seconds';seconds.type='number';seconds.min=1;seconds.max=86400;seconds.value=60;seconds.required=true;
       params.append(inputLabel('倒计时秒数',seconds));
     }
+    if(choice.value==='http_tool') {
+      const selection=el('select');
+      selection.name='value';selection.required=true;
+      const tools=(networkConfig?.tools || []).filter(tool=>tool.automation || tool.id===step?.value);
+      selection.append(new Option('选择已授权的工具',''),...tools.map(tool=>new Option(tool.name,tool.id)));
+      selection.value=step?.value || '';
+      const inputs=el('div',undefined,'field-grid');
+      const render=()=>{
+        const tool=tools.find(item=>item.id===selection.value);
+        inputs.replaceChildren(...(tool?.parameters || []).map(param=>{
+          const input=param.type==='boolean'?el('select'):el('input');
+          if(param.type==='boolean')input.append(new Option('真','true'),new Option('假','false'));
+          if(param.type==='number'){input.type='number';input.step='any';}
+          input.dataset.networkArgument=param.name;
+          input.required=true;
+          if(tool.id===step?.value && step.parameters?.[param.name]!==undefined)input.value=step.parameters[param.name];
+          return inputLabel(param.name,input);
+        }));
+      };
+      selection.onchange=render;
+      params.append(inputLabel('工具',selection),inputs);
+      render();
+    }
     if(choice.value==='flow') {
       const selection=el('select');
       selection.name='value';selection.required=true;
@@ -496,7 +519,8 @@ function updateRuleActions() {
   for(const row of rows) row.lastElementChild.disabled=rows.length<=1;
 }
 let editingRule = '';
-function openRule(rule) {
+async function openRule(rule) {
+  await loadNetworkConfig();
   const form=$('rule-form');
   form.reset();
   editingRule=rule?.id||'';
@@ -526,6 +550,7 @@ $('rule-form').addEventListener('submit',event=>submitForm(event,async()=>{
     if(value)step.value=value.value;
     const seconds=row.querySelector('[name=seconds]');
     if(seconds)step.seconds=seconds.valueAsNumber;
+    if(step.action==='http_tool')step.parameters=Object.fromEntries([...row.querySelectorAll('[data-network-argument]')].map(input=>[input.dataset.networkArgument,input.value]));
     return step;
   });
   await api(editingRule?'/api/automation/'+editingRule:'/api/automation',editingRule?'PUT':'POST',payload);
@@ -667,7 +692,7 @@ $('config-run').addEventListener('click', () => {
 });
 $('config-form').addEventListener('input', () => {$('config-run').disabled = true;});
 $('new-task').addEventListener('click', () => openTask());
-$('new-schedule').addEventListener('click', () => openRule());
+$('new-schedule').addEventListener('click', event => handle(() => openRule(),event.currentTarget));
 $('import-ability').addEventListener('click', () => $('ability-file').click());
 $('ability-file').addEventListener('change', () => handle(async () => {
   const file = $('ability-file').files[0]; if (!file) return;
@@ -1289,7 +1314,7 @@ $('owner-logout').addEventListener('click', () => handle(async () => {
 }, $('owner-logout')));
 page(location.hash.slice(1));refresh();setInterval(refresh,2500);setInterval(updateCountdowns,1000);
 
-const activityTypes = {asr: '语音识别', llm: '大模型', tts: '语音合成', external: '外部 Agent', ability: '付费能力'};
+const activityTypes = {asr: '语音识别', llm: '大模型', tts: '语音合成', external: '外部 Agent', ability: '付费能力', search: '网页搜索'};
 const activityPageSize = 50;
 let usageOffset = 0;
 let dialogueOffset = 0;
@@ -1429,6 +1454,7 @@ function displayUsage(data) {
     const measured=[];
     if (row.input_tokens!==undefined || row.output_tokens!==undefined) measured.push(`${row.input_tokens??'—'} / ${row.output_tokens??'—'} Token`);
     if (row.audio_ms!==undefined) measured.push(`${(row.audio_ms/1000).toFixed(2)} 秒（设备计量）`);
+    if (row.billable_request!==undefined) measured.push(row.billable_request?'1 次计费请求':'0 次计费请求');
     if (row.characters!==undefined) measured.push(`${row.characters} 字（设备计量）`);
     const tr=el('tr');
     const service=`${activityTypes[row.service]||row.service} · ${[row.provider,row.model].filter(Boolean).join(' / ')}`;
@@ -1537,7 +1563,268 @@ $('dialogue-clear').addEventListener('click',()=>handle(async()=>{
 function refreshActivityPage() {
   if (!serverStatus) return;
   if (location.hash==='#usage') loadUsage();
+  if (!$('home').hidden) loadOverviewUsage().catch(() => {
+    $('home-usage-coverage').textContent = '暂时无法读取用量';
+  });
+  if (!networkConfig && (!$('system').hidden || !$('abilities').hidden)) handle(loadNetworkConfig);
   if (location.hash==='#dialogues'||location.hash==='#system'||location.hash==='#settings/privacy') handle(loadDialogues);
 }
 window.addEventListener('hashchange',refreshActivityPage);
 setInterval(refreshActivityPage,15000);
+
+const networkRoot = '/api/network-tools';
+let networkConfig;
+let networkRead = 0;
+let editingNetworkTool = '';
+const searchForm = $('search-form');
+const haConnection = $('ha-connection-form');
+const haForm = $('ha-tool-form');
+const httpForm = $('http-tool-form');
+
+function updateSearchKey() {
+  $('search-key-label').hidden = searchForm.elements.reuse.checked;
+}
+
+async function loadNetworkConfig() {
+  const request = ++networkRead;
+  const config = await api(networkRoot);
+  if (request !== networkRead) return;
+  const initial = !networkConfig;
+  networkConfig = config;
+  if (initial) {
+    searchForm.elements.enabled.checked = config.search.enabled;
+    searchForm.elements.reuse.checked = config.search.reuse;
+    updateSearchKey();
+  }
+  $('search-key-status').textContent = config.search_key ? '已保存，留空保留。' : '';
+  renderNetworkTools();
+}
+
+function searchPayload() {
+  return {enabled: searchForm.elements.enabled.checked, reuse: searchForm.elements.reuse.checked,
+    api_key: searchForm.elements.reuse.checked ? '' : searchForm.elements.api_key.value.trim()};
+}
+
+searchForm.elements.reuse.addEventListener('change', updateSearchKey);
+searchForm.addEventListener('submit', event => {
+  event.preventDefault();
+  networkAction($('search-result'), searchForm.querySelector('[type=submit]'), async () => {
+    await api(networkRoot + '/search', 'PUT', searchPayload());
+    searchForm.elements.api_key.value = '';
+    await loadNetworkConfig();
+    return '搜索配置已保存。';
+  });
+});
+$('search-test').onclick = event => networkAction($('search-result'), event.currentTarget, async () => {
+  const data = await api(networkRoot + '/search/test', 'POST', {...searchPayload(), query: 'DeepSeek 官方网站'});
+  const first = JSON.parse(data.result)[0];
+  return first ? '搜索成功 · ' + first.title : '已连接搜索服务，本次没有结果。';
+});
+
+async function networkAction(result, trigger, action) {
+  trigger.disabled = true;
+  result.hidden = false;
+  result.textContent = '处理中…';
+  try { result.textContent = await action(); }
+  catch (error) { result.textContent = error.message; }
+  finally { trigger.disabled = false; }
+}
+
+function renderNetworkTools() {
+  const target = $('network-tool-list');
+  const list = networkConfig.tools || [];
+  if (!list.length) {
+    target.replaceChildren(empty('尚未添加实体工具或自定义 HTTP 工具。'));
+    return;
+  }
+  const table = el('table');
+  table.setAttribute('aria-label', '已保存的工具');
+  const header = table.createTHead().insertRow();
+  for (const title of ['工具','来源','可用入口','操作']) header.append(el('th', title));
+  const body = table.createTBody();
+  for (const tool of list) {
+    const row = body.insertRow();
+    row.insertCell().textContent = tool.name;
+    row.insertCell().textContent = tool.kind === 'ha' ? 'Home Assistant' : '自定义 HTTP';
+    row.insertCell().textContent = [tool.voice && '语音', tool.automation && '自动化'].filter(Boolean).join('、') || '手动试运行';
+    const controls = el('div', undefined, 'table-actions');
+    controls.append(button('配置', () => tool.kind === 'ha' ? openHA(tool) : openHTTP(tool), 'secondary'),
+      button('移除', async () => {
+        if (!confirm('移除工具「'+tool.name+'」？')) return;
+        await api(networkRoot + '/' + tool.id, 'DELETE');
+        await loadNetworkConfig();
+      }, 'secondary'));
+    row.insertCell().append(controls);
+  }
+  const scroll = el('div', undefined, 'desktop-table');
+  scroll.append(table);
+  target.replaceChildren(scroll);
+}
+
+async function openHA(tool) {
+  if (!networkConfig) await loadNetworkConfig();
+  editingNetworkTool = tool?.id || '';
+  haConnection.reset();
+  haForm.reset();
+  haForm.hidden = true;
+  haConnection.elements.endpoint.value = networkConfig.home_assistant || '';
+  $('ha-key-status').textContent = networkConfig.ha_key ? '已保存，留空保留。' : '';
+  $('ha-connection-status').textContent = $('ha-tool-status').textContent = '';
+  $('ha-dialog').showModal();
+  if (networkConfig.home_assistant) {
+    await networkAction($('ha-connection-status'), $('ha-reload'), () => loadHAEntities(tool));
+  }
+}
+
+function updateHAOperation() {
+  const [domain] = haForm.elements.entity.value.split('.');
+  const movable = domain === 'light' || domain === 'switch';
+  for (const option of haForm.elements.operation.options) option.disabled = option.value !== 'state' && !movable;
+  if (haForm.elements.operation.selectedOptions[0]?.disabled) haForm.elements.operation.value = 'state';
+  const read = haForm.elements.operation.value === 'state';
+  haForm.elements.voice.disabled = !read;
+  if (!read) haForm.elements.voice.checked = false;
+}
+
+async function loadHAEntities(tool) {
+  const items = await api(networkRoot + '/home-assistant/entities');
+  const entities = haForm.elements.entity;
+  const ordered = [...items].sort((a,b) => a.entity_id.localeCompare(b.entity_id));
+  entities.replaceChildren(new Option('请选择实体', ''), ...ordered.map(item => {
+    const id = item.entity_id;
+    const name = item.attributes.friendly_name;
+    return new Option(name ? name+' · '+id : id, id);
+  }));
+  if (tool) {
+    entities.value = tool.entity;
+    haForm.elements.operation.value = tool.operation;
+    haForm.elements.name.value = tool.name;
+    haForm.elements.voice.checked = tool.voice;
+    haForm.elements.automation.checked = tool.automation;
+  }
+  updateHAOperation();
+  haForm.hidden = false;
+  return ordered.length ? '已读取 '+ordered.length+' 个实体。' : '连接成功，未找到实体。';
+}
+$('ha-open').onclick = event => handle(() => openHA(), event.currentTarget);
+$('ha-reload').onclick = event => networkAction($('ha-connection-status'), event.currentTarget,
+  () => loadHAEntities((networkConfig?.tools || []).find(tool => tool.id === editingNetworkTool)));
+haConnection.addEventListener('submit', event => {
+  event.preventDefault();
+  networkAction($('ha-connection-status'), haConnection.querySelector('[type=submit]'), async () => {
+    await api(networkRoot + '/home-assistant', 'PUT', Object.fromEntries(new FormData(haConnection)));
+    haConnection.elements.api_key.value = '';
+    await loadNetworkConfig();
+    $('ha-key-status').textContent = '已保存，留空保留。';
+    return loadHAEntities((networkConfig.tools || []).find(tool => tool.id === editingNetworkTool));
+  });
+});
+haForm.elements.entity.onchange = () => {
+  const selected = haForm.elements.entity.selectedOptions[0];
+  if (selected?.value && !haForm.elements.name.value) haForm.elements.name.value = selected.textContent.split(' · ')[0].slice(0,40);
+  updateHAOperation();
+};
+haForm.elements.operation.onchange = updateHAOperation;
+haForm.addEventListener('submit', event => {
+  event.preventDefault();
+  networkAction($('ha-tool-status'), haForm.querySelector('[type=submit]'), async () => {
+    const {entity, operation, name, voice, automation} = haForm.elements;
+    const purposes = {state:'读取状态', turn_on:'开启设备', turn_off:'关闭设备'};
+    await saveNetworkTool({kind:'ha', entity:entity.value, operation:operation.value, name:name.value,
+      description:purposes[operation.value]+' '+name.value, voice:voice.checked, automation:automation.checked});
+    $('ha-dialog').close();
+    toast('实体工具已保存');
+    return '';
+  });
+});
+
+async function saveNetworkTool(payload) {
+  const id = editingNetworkTool;
+  await api(id ? networkRoot + '/' + id : networkRoot, id ? 'PUT' : 'POST', payload);
+  await loadNetworkConfig();
+}
+
+function appendHTTPParameter(param) {
+  const row = el('div', undefined, 'network-parameter');
+  const name = el('input');
+  name.dataset.paramName = '';
+  name.pattern = '[a-zA-Z_][a-zA-Z0-9_]{0,31}';
+  name.required = true;
+  name.value = param?.name || '';
+  const type = el('select');
+  type.dataset.paramType = '';
+  type.append(new Option('文本', 'string'), new Option('数字', 'number'), new Option('布尔值', 'boolean'));
+  type.value = param?.type || 'string';
+  const example = el('input');
+  example.dataset.paramExample = '';
+  example.maxLength = 1000;
+  row.append(inputLabel('参数名', name), inputLabel('类型', type), inputLabel('试运行值', example),
+    button('移除', () => { row.remove(); $('http-add-param').disabled = false; }, 'secondary'));
+  $('http-params').append(row);
+  $('http-add-param').disabled = $('http-params').children.length >= 8;
+}
+$('http-add-param').onclick = () => appendHTTPParameter();
+function updateHTTPMethod() {
+  const read = httpForm.elements.method.value === 'GET';
+  httpForm.elements.voice.disabled = !read;
+  if (!read) httpForm.elements.voice.checked = false;
+}
+httpForm.elements.method.onchange = updateHTTPMethod;
+async function openHTTP(tool) {
+  if (!networkConfig) await loadNetworkConfig();
+  editingNetworkTool = tool?.id || '';
+  httpForm.reset();
+  $('http-result').hidden = true;
+  $('http-params').replaceChildren();
+  $('http-add-param').disabled = false;
+  const keySaved = networkConfig.tool_keys[editingNetworkTool];
+  $('http-key-status').textContent = keySaved ? '已保存，留空保留。' : '';
+  $('http-clear-label').hidden = !keySaved;
+  for (const key of ['name','description','method','endpoint','extract']) {
+    if (tool?.[key]) httpForm.elements[key].value = tool[key];
+  }
+  httpForm.elements.voice.checked = Boolean(tool?.voice);
+  httpForm.elements.automation.checked = Boolean(tool?.automation);
+  updateHTTPMethod();
+  (tool?.parameters || []).forEach(appendHTTPParameter);
+  $('http-dialog').showModal();
+}
+$('http-open').onclick = event => handle(() => openHTTP(), event.currentTarget);
+function httpPayload() {
+  const form = httpForm.elements;
+  const payload = {kind: 'http', voice:form.voice.checked, automation:form.automation.checked, clear_key:form.clear_key.checked};
+  for (const key of ['name','description','endpoint','method','extract','api_key']) payload[key] = form[key].value.trim();
+  payload.parameters = [...$('http-params').children].map(row => ({
+    name: row.querySelector('[data-param-name]').value,
+    type: row.querySelector('[data-param-type]').value
+  }));
+  return payload;
+}
+$('http-test').onclick = event => {
+  if (!httpForm.reportValidity()) return;
+  const payload = httpPayload();
+  if (payload.method === 'POST' && !confirm('这会向目标服务发送真实 POST 请求。确定试运行？')) return;
+  payload.arguments = Object.fromEntries([...$('http-params').children].map((row,i) =>
+    [payload.parameters[i].name, row.querySelector('[data-param-example]').value]));
+  payload.id = editingNetworkTool;
+  networkAction($('http-result'), event.currentTarget, async () => {
+    const {result} = await api(networkRoot + '/test', 'POST', payload);
+    return result || '调用成功，返回为空。';
+  });
+};
+httpForm.addEventListener('submit', event => {
+  event.preventDefault();
+  networkAction($('http-result'), httpForm.querySelector('[type=submit]'), async () => {
+    await saveNetworkTool(httpPayload());
+    $('http-dialog').close();
+    toast('HTTP 工具已保存');
+    return '';
+  });
+});
+
+async function loadOverviewUsage() {
+  const {today_calls: calls, month_unpriced: missing, month_costs: costs} = await api('/api/usage/summary');
+  $('home-usage-calls').textContent = count(calls);
+  $('home-usage-cost').textContent = Object.entries(costs).map(([currency, cost]) => amount(cost,currency)).join(' / ') || (missing ? '—' : '暂无费用');
+  $('home-usage-coverage').textContent = (missing ? count(missing)+' 次无法估价 · ' : '') + '仅供参考，以服务商账单为准';
+}
