@@ -60,7 +60,12 @@ function page(name) {
   }
   const title = customPage ? [custom?.manifest.name || '能力', custom?.manifest.description || ''] : titles[target];
   document.querySelectorAll('.page').forEach(p => {p.hidden = p.id !== target;});
-  document.querySelectorAll('[data-page]').forEach(b => b.classList.toggle('selected', b.dataset.page === name));
+  document.querySelectorAll('[data-page]').forEach(button=>{
+    const active=button.dataset.page===name;
+    button.classList.toggle('selected',active);
+    if(active)button.setAttribute('aria-current','page');
+    else button.removeAttribute('aria-current');
+  });
   $('page-title').textContent = title[0]; $('page-subtitle').textContent = title[1];
   if (target === 'alarms' && state.settings) initializeAlarmTime();
   if (target === 'capability') renderCustomCapability(custom);
@@ -72,6 +77,7 @@ function page(name) {
     }
   }
   $('new-task').hidden = target !== 'tasks';
+  $('http-open').hidden = target !== 'abilities';
 }
 function showAutomation(group) {
   for (const b of document.querySelectorAll('[data-automation]')) {
@@ -109,10 +115,10 @@ const clockCapabilities = {
   timers: ['倒计时','按时长倒数，到点响铃。'],
   alarms: ['闹钟','按时间响铃，支持重复与稍后提醒。']
 };
-function tableContent(id, headings, rows, emptyText) {
+function tableContent(id, headings, rows, emptyText, className = '') {
   if (!rows.length) {$(id).replaceChildren(empty(emptyText));return;}
   const wrap = el('div',undefined,'desktop-table');
-  const table = el('table');
+  const table = el('table',undefined,className);
   const head = table.createTHead().insertRow();
   for (const name of headings) {
     const col = el('th',name);
@@ -136,13 +142,13 @@ function tableContent(id, headings, rows, emptyText) {
   $(id).replaceChildren(wrap);
 }
 function capabilityRow(name, description, status, actions) {
-  const row = el('article', undefined, 'capability-row');
   const info = el('div', undefined, 'capability-info');
-  info.append(el('h3', name), el('p', description));
-  const controls = el('div', undefined, 'capability-actions');
-  controls.append(...actions);
-  row.append(info, status, controls);
-  return row;
+  info.append(el('strong', name), el('p', description));
+  for (const action of actions) action.classList.replace('secondary','table-link');
+  return [info, status, actions];
+}
+function renderCapabilityTable(id, rows, emptyText) {
+  tableContent(id,['名称','状态','操作'],rows,emptyText,'capability-table');
 }
 function savedAbilityRow(a) {
   const m = a.manifest;
@@ -172,19 +178,29 @@ function renderAbilities() {
   });
   const practice = state.settings?.practice_enabled;
   const practiceStatus = practice ? (practiceAvailable ? '已启用' : '待配置') : '未启用';
-  const practiceRow = capabilityRow('外语陪练', '用选定语言练习口语和情景对话。', el('span', practiceStatus,practiceStatus==='已启用'?'badge':'badge paused'),
+  const practiceRow = capabilityRow('外语陪练', '用选定语言练习口语和情景对话。', el('span', practiceStatus,practiceStatus==='已启用'?'badge':practiceStatus==='待配置'?'badge waiting':'badge paused'),
     [button('配置', openPractice, 'secondary')]);
   const haConnected = networkConfig?.home_assistant && networkConfig?.ha_key;
   const haRow = capabilityRow('Home Assistant', '读取已选择的设备状态，将灯和开关接入自动化。',
-    el('span', !networkConfig ? '读取中' : haConnected ? '已配置' : '未连接',haConnected?'badge':'badge paused'),
+    el('span', !networkConfig ? '读取中' : haConnected ? '已配置' : '未连接',haConnected?'badge info':'badge paused'),
     [button('配置', () => openHA(), 'secondary')]);
   const tools = (networkConfig?.tools || []).filter(tool=>tool.kind==='http').map(tool=>
-    capabilityRow(tool.name,tool.description,el('span',toolChannels(tool),'badge'),
+    capabilityRow(tool.name,tool.description,el('span',toolChannels(tool),'badge info'),
       [button('配置',()=>openHTTP(tool),'secondary'),button('移除',()=>removeNetworkTool(tool),'secondary')]));
-  $('ability-list').replaceChildren(roomRow, ...clockRows, practiceRow, haRow, ...custom.map(savedAbilityRow), ...tools);
-  $('flow-list').replaceChildren(...(flows.length ? flows.map(savedAbilityRow) : [empty('还没有手动流程。')]));
+  renderCapabilityTable('ability-list',[roomRow,...clockRows,practiceRow,haRow,...custom.map(savedAbilityRow),...tools],'暂无能力。');
+  renderCapabilityTable('flow-list',flows.map(savedAbilityRow),'还没有手动流程。');
   renderCapabilityMenus(custom);
   renderRoomAudioBadge();
+}
+function navIcon(name) {
+  const ns='http://www.w3.org/2000/svg';
+  const icon=document.createElementNS(ns,'svg');
+  const use=document.createElementNS(ns,'use');
+  icon.setAttribute('class','nav-icon');
+  icon.setAttribute('aria-hidden','true');
+  use.setAttribute('href','#icon-'+name);
+  icon.append(use);
+  return icon;
 }
 function renderCapabilityMenus(custom) {
   const routes = Object.entries(clockCapabilities).filter(([id])=>state.features?.[id]!==false)
@@ -194,11 +210,12 @@ function renderCapabilityMenus(custom) {
   }
   const links = routes.map(([route,name]) => {
     const link = button('',()=>{location.hash=route;});
-    const icon = el('span', {timers:'⏱︎', alarms:'⏰︎'}[route] || '✧');
-    icon.setAttribute('aria-hidden','true');
+    const icon = navIcon({timers:'timer', alarms:'alarm'}[route] || 'abilities');
     link.append(icon, document.createTextNode(' ' + name));
     link.dataset.page=route;
-    link.classList.toggle('selected',location.hash==='#'+route);
+    const selected=location.hash==='#'+route;
+    link.classList.toggle('selected',selected);
+    if(selected)link.setAttribute('aria-current','page');
     return link;
   });
   $('capability-menu').replaceChildren(...links);
@@ -324,7 +341,7 @@ $('room-audio-play').addEventListener('click', () => handle(() => {
 function renderSchedules() {
   const existing=state.schedules.filter(sc=>!sc.alarm_name && sc.ability_id!=='quick-timer');
   $('legacy-schedules').hidden=!existing.length;
-  $('schedule-list').replaceChildren(...(existing.length ? existing.map(sc => {
+  const rows=existing.map(sc => {
     const waitingRetry = sc.enabled && sc.repeat === 'once' && sc.failure;
     const label = waitingRetry ? '执行失败' : sc.enabled ? '已启用' : '任务已创建';
     const name = state.abilities[sc.ability_id]?.manifest.name || sc.ability_id;
@@ -338,7 +355,8 @@ function renderSchedules() {
     const description = [`${when(sc.next_at, sc.timezone)} · ${frequency} · ${sc.timezone}`, sc.inputs.content, sc.failure]
       .filter(Boolean).join(' · ');
     return capabilityRow(name, description, el('span', label, sc.enabled && !sc.failure ? 'badge' : 'badge paused'), actions);
-  }) : [empty('还没有定时规则。')]));
+  });
+  renderCapabilityTable('schedule-list',rows,'还没有定时规则。');
 }
 function localTimeValue(date, timeZone = state.settings?.timezone) {
   const fields = new Intl.DateTimeFormat('en-CA', {
@@ -747,6 +765,15 @@ document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click
 document.querySelectorAll('[data-page]').forEach(b => b.addEventListener('click', () => {location.hash = b.dataset.page;}));
 document.querySelectorAll('[data-automation]').forEach(b => b.addEventListener('click', () => showAutomation(b.dataset.automation)));
 document.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => {location.hash = b.dataset.go;}));
+const mobileNav=$('mobile-nav-toggle');
+function setMobileNav(expanded) {
+  mobileNav.setAttribute('aria-expanded',String(expanded));
+  $('console-nav').classList.toggle('is-expanded',expanded);
+}
+mobileNav.addEventListener('click',()=>setMobileNav(mobileNav.getAttribute('aria-expanded')!=='true'));
+$('console-nav').addEventListener('click',event=>{
+  if(event.target.closest('[data-page]'))setMobileNav(false);
+});
 window.addEventListener('hashchange', () => {page(location.hash.slice(1));refresh(true);});
 
 const serviceNames = {asr:'语音识别 ASR',llm:'大模型 LLM',tts:'语音合成 TTS',external:'外部 Agent'};
@@ -1575,7 +1602,11 @@ function displayUsage(data) {
   drawActivityCharts();
 
   const table=el('table'), heading=el('tr');
-  for (const title of ['时间','类型 / 服务','结果','耗时','用量','估算费用']) heading.append(el('th',title));
+  for (const title of ['时间','类型 / 服务','结果','耗时','用量','估算费用','操作']) {
+    const cell=el('th',title);
+    cell.scope='col';
+    heading.append(cell);
+  }
   const head=el('thead'); head.append(heading); table.append(head);
   const body=el('tbody');
   for (const row of data.recent) {
@@ -1587,10 +1618,20 @@ function displayUsage(data) {
     const tr=el('tr');
     const service=`${activityTypes[row.service]||row.service} · ${[row.provider,row.model].filter(Boolean).join(' / ')}`;
     const status=(row.success?'成功':`失败 · ${row.error_code||'服务错误'}`)+(row.test?' · 验证':'');
-    for (const value of [when(row.at),service,status,`${row.duration_ms} ms`,measured.join(' · ')||'未提供']) tr.append(el('td',value));
-    const estimate=el('td',row.estimated===undefined?'无法估价':amount(row.estimated,row.currency));
-    if (row.price_source) estimate.title=`${row.price_source} · ${row.price_at?.slice(0,10)||''}`;
-    tr.append(estimate);
+    const usage=measured.join(' · ')||'未提供';
+    const cost=row.estimated===undefined?'无法估价':amount(row.estimated,row.currency);
+    for (const value of [when(row.at),service]) tr.append(el('td',value));
+    const result=el('td');
+    result.append(el('span',status,row.success?'badge':'badge error'));
+    tr.append(result,el('td',`${row.duration_ms} ms`),el('td',usage),el('td',cost));
+    const actions=el('td');
+    actions.append(button('详情',()=>{
+      const fields=[['时间',when(row.at)],['服务',service],['结果',status],['耗时',`${row.duration_ms} ms`],['用量',usage],['估算费用',cost]];
+      if(row.price_source) fields.push(['价格来源',row.price_at ? `${row.price_source} · ${row.price_at.slice(0,10)}` : row.price_source]);
+      $('usage-detail-fields').replaceChildren(...fields.flatMap(([name,value])=>[el('dt',name),el('dd',value)]));
+      $('usage-detail').showModal();
+    },'table-link'));
+    tr.append(actions);
     body.append(tr);
   }
   table.append(body);
@@ -1763,14 +1804,18 @@ async function removeNetworkTool(tool) {
 }
 function renderHATools() {
   const tools = (networkConfig?.tools || []).filter(tool=>tool.kind==='ha');
-  $('ha-tool-list').replaceChildren(...tools.map(tool=>capabilityRow(tool.name, tool.entity,
-    el('span',toolChannels(tool),'badge'), [
+  if (!tools.length) {
+    $('ha-tool-list').replaceChildren();
+    return;
+  }
+  renderCapabilityTable('ha-tool-list', tools.map(tool=>capabilityRow(tool.name, tool.entity,
+    el('span',toolChannels(tool),'badge info'), [
       button('编辑',async () => {
         editingNetworkTool=tool.id;
         await loadHAEntities(tool);
       },'secondary'),
       button('移除',()=>removeNetworkTool(tool),'secondary')
-    ])));
+    ])), '');
 }
 const practicePath='/api/abilities/language-practice';
 const practiceForm=$('practice-form');

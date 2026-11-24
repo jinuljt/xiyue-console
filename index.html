@@ -1,32 +1,48 @@
 <!doctype html>
 <html lang="zh-CN">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>喜悦 Voice · 控制台</title><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
-<body>
+<body class="console">
+<svg xmlns="http://www.w3.org/2000/svg" class="icon-library" aria-hidden="true" width="0" height="0">
+  <symbol id="icon-home" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></symbol>
+  <symbol id="icon-system" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="8" cy="6" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="10" cy="18" r="2"/></symbol>
+  <symbol id="icon-abilities" viewBox="0 0 24 24"><rect x="3" y="4" width="8" height="7" rx="1"/><rect x="13" y="13" width="8" height="7" rx="1"/><path d="M15 4h5v6M4 14v6h6"/></symbol>
+  <symbol id="icon-device-status" viewBox="0 0 24 24"><path d="M3 12h4l3-7 4 14 3-7h4"/></symbol>
+  <symbol id="icon-usage" viewBox="0 0 24 24"><path d="M4 4v16h16M8 16v-4m5 4V8m5 8V5"/></symbol>
+  <symbol id="icon-dialogues" viewBox="0 0 24 24"><path d="M20 15a2 2 0 0 1-2 2H9l-5 4V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2zM8 9h8m-8 4h5"/></symbol>
+  <symbol id="icon-tasks" viewBox="0 0 24 24"><path d="m3 7 2 2 4-4m-6 10 2 2 4-4m3-5h8m-8 8h8"/></symbol>
+  <symbol id="icon-automation" viewBox="0 0 24 24"><rect x="3" y="4" width="6" height="5" rx="1"/><rect x="15" y="15" width="6" height="5" rx="1"/><path d="M6 9v8h9m-4-11h8"/></symbol>
+  <symbol id="icon-timer" viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6m-3 0v3m7 0 2 2"/></symbol>
+  <symbol id="icon-alarm" viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M3 6l4-4m10 0 4 4M6 19l-2 2m14-2 2 2"/></symbol>
+  <symbol id="icon-logout" viewBox="0 0 24 24"><path d="M10 20H5V4h5m4 4 4 4-4 4m-5-4h9"/></symbol>
+  <symbol id="icon-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+  <symbol id="icon-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+</svg>
 <aside class="sidebar">
   <a class="brand" href="#home"><span class="brandmark" aria-hidden="true">悦</span><span class="brand-name">喜悦 Voice</span></a>
-  <nav aria-label="主导航">
-    <button data-page="home" class="selected"><span>◉</span> 系统总览</button>
-    <button data-page="system"><span>⚙</span> 系统配置</button>
-    <button data-page="abilities"><span>✧</span> 能力中心</button>
-    <button data-page="device-status"><span aria-hidden="true">◈</span> 设备状态</button>
-    <button data-page="usage"><span>▥</span> 用量</button>
-    <button data-page="dialogues"><span>≡</span> 对话记录</button>
+  <button id="mobile-nav-toggle" type="button" class="secondary" aria-controls="console-nav" aria-expanded="false"><svg class="nav-icon" aria-hidden="true"><use href="#icon-menu"></use></svg>菜单</button>
+  <nav id="console-nav" aria-label="主导航">
+    <button data-page="home" class="selected"><svg class="nav-icon" aria-hidden="true"><use href="#icon-home"></use></svg> 系统总览</button>
+    <button data-page="system"><svg class="nav-icon" aria-hidden="true"><use href="#icon-system"></use></svg> 系统配置</button>
+    <button data-page="abilities"><svg class="nav-icon" aria-hidden="true"><use href="#icon-abilities"></use></svg> 能力中心</button>
+    <button data-page="device-status"><svg class="nav-icon" aria-hidden="true"><use href="#icon-device-status"></use></svg> 设备状态</button>
+    <button data-page="usage"><svg class="nav-icon" aria-hidden="true"><use href="#icon-usage"></use></svg> 用量</button>
+    <button data-page="dialogues"><svg class="nav-icon" aria-hidden="true"><use href="#icon-dialogues"></use></svg> 对话记录</button>
     <div class="nav-caption">功能运行</div>
-    <button data-page="tasks"><span>☷</span> 待办</button>
+    <button data-page="tasks"><svg class="nav-icon" aria-hidden="true"><use href="#icon-tasks"></use></svg> 待办</button>
     <div id="capability-menu"></div>
-    <button data-page="automation"><span>◷</span> 自动化</button>
-    <button id="owner-logout" type="button" hidden><span aria-hidden="true">↪</span> 退出登录</button>
+    <button data-page="automation"><svg class="nav-icon" aria-hidden="true"><use href="#icon-automation"></use></svg> 自动化</button>
+    <button id="owner-logout" type="button" hidden><svg class="nav-icon" aria-hidden="true"><use href="#icon-logout"></use></svg>退出登录</button>
   </nav>
 </aside>
 <main>
-  <header><div><h1 id="page-title">系统总览</h1><p id="page-subtitle">配置服务、管理能力，了解喜悦的运行情况。</p></div><button class="primary" id="new-task" hidden>＋ 添加待办</button></header>
+  <header class="page-header"><div><h1 id="page-title">系统总览</h1><p id="page-subtitle">配置服务、管理能力，了解喜悦的运行情况。</p></div><div class="page-actions"><button class="primary" id="new-task" hidden><svg class="nav-icon" aria-hidden="true"><use href="#icon-plus"></use></svg>添加待办</button><button class="primary" id="http-open" type="button" hidden><svg class="nav-icon" aria-hidden="true"><use href="#icon-plus"></use></svg>添加工具</button></div></header>
   <div id="connection-error" role="alert" hidden>暂时无法连接服务，页面状态可能已过期。正在重连…</div>
   <section id="home" class="page">
     <section id="first-setup" class="overview-banner" hidden>
       <div><h2>首次配置喜悦</h2><p id="setup-next"></p></div>
       <button id="setup-action" type="button" class="primary">配置大模型</button>
     </section>
-    <div class="stats overview-stats"><article><span>音箱型号</span><strong class="text-stat" id="device-name">—</strong><small id="runtime-version"></small></article><article><span>任务运行服务</span><strong class="text-stat" id="runtime-state">连接中</strong><small id="runtime-uptime">正在读取实时状态</small></article><article><span>已启用能力</span><strong id="stat-abilities">—</strong><small>在能力中心中查看与配置</small></article></div>
+    <div class="stats overview-stats"><article><span>音箱型号</span><strong class="text-stat" id="device-name">—</strong><small id="runtime-version"></small></article><article><span>运行状态</span><strong class="text-stat" id="runtime-state">连接中</strong><small id="runtime-uptime">正在读取实时状态</small><a class="stat-link" href="#device-status">查看设备状态</a></article><article><span>已启用能力</span><strong id="stat-abilities">—</strong><small>在能力中心中查看与配置</small></article></div>
     <section class="settings-panel">
       <div class="section-heading"><h2>第三方用量</h2><a href="#usage">查看用量明细</a></div>
       <div class="stats overview-stats">
@@ -36,9 +52,7 @@
     </section>
   </section>
   <section id="abilities" class="page" hidden>
-    <div class="section-heading capability-toolbar"><button id="http-open" class="primary" type="button">添加工具</button></div>
-    <div id="ability-list" class="capability-list"></div>
-
+    <div id="ability-list"></div>
   </section>
   <section id="tasks" class="page" hidden><div class="section-heading"><p>记录要做的事，完成后标记。</p></div><div id="task-list"></div>
   </section>
@@ -78,7 +92,7 @@
     </section>
     <section id="automation-flows" hidden>
       <div class="section-heading"><p>配置并运行多步流程，也可以把流程加入定时规则。</p><button id="import-ability" type="button" class="secondary">＋ 导入流程 JSON</button><input id="ability-file" type="file" accept="application/json,.json" hidden></div>
-      <div id="flow-list" class="capability-list"></div>
+      <div id="flow-list"></div>
     </section>
     <section id="automation-runs" hidden>
       <div id="rule-runs"></div>
@@ -96,6 +110,7 @@
     </section>
   </section>
   <section id="system" class="page" hidden>
+    <div class="settings-surface">
     <nav class="settings-tabs automation-tabs" aria-label="系统配置分类">
       <a data-settings-tab="device" href="#settings/device">设备</a>
       <a data-settings-tab="voice" href="#settings/voice">语音与语言</a>
@@ -104,8 +119,6 @@
       <a data-settings-tab="privacy" href="#settings/privacy">账号与隐私</a>
     </nav>
     <form data-settings-scope="device" id="settings-device-form" hidden>
-      <div class="settings-toolbar"><span class="settings-save-state muted" role="status"></span><button type="submit" class="primary" disabled>保存设备设置</button></div>
-      <p class="form-error" role="alert"></p>
       <section class="settings-panel"><div class="panel-heading"><h2>基本设置</h2><p>查看音箱型号，设置唤醒词和计划时区。</p></div><div class="field-grid"><div><span>音箱型号</span><p id="setting-device">型号待确认</p></div><label>唤醒词<input id="setting-wake" required maxlength="48"></label><div class="timezone-picker">
         <label for="setting-timezone">计划时区</label>
         <div class="timezone-control">
@@ -115,10 +128,10 @@
         <ul id="timezone-list" role="listbox" aria-label="时区选项" hidden></ul>
         <small>新建的定时计划按此时区运行。</small>
       </div></div></section>
+      <div class="settings-toolbar"><span class="settings-save-state muted" role="status"></span><button type="submit" class="primary" disabled>保存设备设置</button></div>
+      <p class="form-error" role="alert"></p>
     </form>
     <form data-settings-scope="voice" id="settings-voice-form" hidden>
-      <div class="settings-toolbar"><span class="settings-save-state muted" role="status"></span><button type="submit" class="primary" disabled>保存语音设置</button></div>
-      <p class="form-error" role="alert"></p>
       <section class="settings-panel">
         <h2>语音识别 ASR</h2>
         <p id="asr-unavailable"></p>
@@ -159,10 +172,10 @@
         <div class="panel-heading"><h2>对话语言</h2><p>可选语言随语音合成服务和音色而变化。你也可以说「这题用英文回答」。</p></div>
         <label>默认回答语言<select id="reply-language" required></select></label>
       </section>
+      <div class="settings-toolbar"><span class="settings-save-state muted" role="status"></span><button type="submit" class="primary" disabled>保存语音设置</button></div>
+      <p class="form-error" role="alert"></p>
     </form>
     <form data-settings-scope="model" id="settings-model-form" hidden>
-      <div class="settings-toolbar"><span class="settings-save-state muted" role="status"></span><button type="submit" class="primary" disabled>保存模型配置</button></div>
-      <p class="form-error" role="alert"></p>
       <div id="model-settings"></div>
       <details id="advanced-settings" class="settings-panel">
         <summary>高级接入</summary>
@@ -178,6 +191,8 @@
         <p data-verify-mode="hybrid" hidden>普通问题由大模型回答。以「交给外部助手」开头的请求会交给连接器。</p>
         <div id="external-settings"></div>
       </details>
+      <div class="settings-toolbar"><span class="settings-save-state muted" role="status"></span><button type="submit" class="primary" disabled>保存模型配置</button></div>
+      <p class="form-error" role="alert"></p>
     </form>
     <form id="search-form" class="settings-panel" data-settings-scope="search" hidden>
       <div class="panel-heading"><h2>网页搜索</h2><p>查询近期信息或读取公开网页。使用 DeepSeek 独立搜索接口，适用于音箱的大模型直连模式及混合模式的本地对话。成功且有结果的调用按次计费。</p></div>
@@ -196,6 +211,7 @@
       <h2>隐私与记录</h2><label class="check-label"><input id="dialogue-enabled" type="checkbox">保存对话文字</label>
       <small>开启后在音箱本机保存识别文字和回复，切换后立即生效。</small>
     </section>
+    </div>
     </div>
   </section>
   <section id="device-status" class="page" hidden>
@@ -250,9 +266,8 @@
     <div id="dialogue-list"></div>
     <div class="service-actions"><button type="button" id="dialogue-prev" class="secondary">上一页</button><span id="dialogue-page"></span><button type="button" id="dialogue-next" class="secondary">下一页</button></div>
   </section>
-  <footer>喜悦 · 把生活的小事，认真接住。</footer>
 </main>
-<dialog id="room-audio-dialog" aria-labelledby="room-audio-title">
+<dialog id="room-audio-dialog" class="drawer" aria-labelledby="room-audio-title">
       <div class="dialog-heading"><h2 id="room-audio-title">远程听音</h2><button type="button" data-close aria-label="关闭">×</button></div>
       <p>用安卓手机上的 <strong>IP Webcam</strong> 收音，喜悦音箱实时播放。</p>
       <ol class="muted">
@@ -285,7 +300,7 @@
         <p id="room-audio-check" role="status" class="muted" hidden></p>
       </form>
     </dialog>
-<dialog id="rule-dialog" aria-labelledby="rule-title">
+<dialog id="rule-dialog" class="drawer" aria-labelledby="rule-title">
   <form id="rule-form">
     <div class="dialog-heading"><h2 id="rule-title">新建自动化规则</h2><button type="button" data-close aria-label="关闭">×</button></div>
     <label>规则名称<input name="name" maxlength="40" required></label>
@@ -305,11 +320,15 @@
   <form id="task-form"><div class="dialog-heading"><h2 id="task-title">添加待办</h2><button type="button" data-close aria-label="关闭">×</button></div>
   <input id="task-ability" type="hidden"><div id="task-fields"></div><p class="form-error" role="alert"></p><button class="primary" type="submit">确认</button></form>
 </dialog>
-<dialog id="dialogue-detail" aria-labelledby="dialogue-detail-title">
+<dialog id="usage-detail" class="drawer" aria-labelledby="usage-detail-title">
+  <div class="dialog-heading"><h2 id="usage-detail-title">调用详情</h2><button type="button" data-close aria-label="关闭">×</button></div>
+  <dl id="usage-detail-fields" class="detail-list"></dl>
+</dialog>
+<dialog id="dialogue-detail" class="drawer" aria-labelledby="dialogue-detail-title">
   <div class="dialog-heading"><h2 id="dialogue-detail-title">对话详情</h2><button type="button" data-close aria-label="关闭">×</button></div>
   <div id="dialogue-detail-body"></div>
 </dialog>
-<dialog id="practice-dialog" aria-labelledby="practice-title">
+<dialog id="practice-dialog" class="drawer" aria-labelledby="practice-title">
   <form id="practice-form">
     <div class="dialog-heading"><h2 id="practice-title">外语陪练</h2><button type="button" data-close aria-label="关闭">×</button></div>
     <p>用选定语言模拟场景、练习表达。说「陪我练口语，模拟点咖啡」开始，说「退出陪练」结束。</p>
@@ -320,7 +339,7 @@
     <div class="actions"><a href="#settings/voice" id="practice-voice-link">配置语音服务</a><button type="submit" class="primary">保存陪练设置</button></div>
   </form>
 </dialog>
-<dialog id="add-tool-dialog" aria-labelledby="add-tool-title">
+<dialog id="add-tool-dialog" class="drawer" aria-labelledby="add-tool-title">
   <div class="dialog-heading"><h2 id="add-tool-title">添加工具</h2><button type="button" data-close aria-label="关闭">×</button></div>
   <form id="weather-form">
     <h3>查当前气温</h3>
@@ -332,7 +351,7 @@
   </form>
   <button type="button" id="http-blank" class="secondary">从空白创建 HTTP 工具</button>
 </dialog>
-<dialog id="ha-dialog" aria-labelledby="ha-title">
+<dialog id="ha-dialog" class="drawer" aria-labelledby="ha-title">
   <div class="dialog-heading"><h2 id="ha-title">Home Assistant</h2><button type="button" data-close aria-label="关闭">×</button></div>
   <p>在 Home Assistant 的个人资料页创建长期访问令牌。保存连接后，选择喜悦可以使用的实体。</p>
   <form id="ha-connection-form">
@@ -352,7 +371,7 @@
     <div class="actions"><button class="primary" type="submit">保存实体工具</button></div>
   </form>
 </dialog>
-<dialog id="http-dialog" aria-labelledby="http-title">
+<dialog id="http-dialog" class="drawer" aria-labelledby="http-title">
   <form id="http-tool-form">
     <div class="dialog-heading"><h2 id="http-title">自定义 HTTP 工具</h2><button type="button" data-close aria-label="关闭">×</button></div>
     <label>名称<input name="name" maxlength="40" required placeholder="例如：查询空气质量"></label>
@@ -369,7 +388,7 @@
     <pre id="http-result" class="network-result" role="status" hidden></pre>
   </form>
 </dialog>
-<dialog id="config-dialog" aria-labelledby="config-title"><form id="config-form"><div class="dialog-heading"><h2 id="config-title">能力配置</h2><button type="button" data-close aria-label="关闭">×</button></div><p id="config-description" class="muted"></p><ol id="flow-steps" class="flow-steps" hidden></ol><label class="check-label"><input id="config-enabled" type="checkbox"><span id="config-enable-label">启用此能力</span></label><div id="config-fields"></div><p class="form-error" role="alert"></p><div class="actions"><button id="config-run" type="button" class="secondary" hidden>运行流程</button><button class="primary" type="submit">保存配置</button></div></form></dialog>
+<dialog id="config-dialog" class="drawer" aria-labelledby="config-title"><form id="config-form"><div class="dialog-heading"><h2 id="config-title">能力配置</h2><button type="button" data-close aria-label="关闭">×</button></div><p id="config-description" class="muted"></p><ol id="flow-steps" class="flow-steps" hidden></ol><label class="check-label"><input id="config-enabled" type="checkbox"><span id="config-enable-label">启用此能力</span></label><div id="config-fields"></div><p class="form-error" role="alert"></p><div class="actions"><button id="config-run" type="button" class="secondary" hidden>运行流程</button><button class="primary" type="submit">保存配置</button></div></form></dialog>
 <dialog id="pair-dialog" aria-labelledby="pair-title">
   <h2 id="pair-title">登录喜悦 Voice</h2>
   <form id="pair-form">
