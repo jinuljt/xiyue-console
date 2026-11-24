@@ -83,16 +83,11 @@
   <section id="automation" class="page" hidden>
     <div class="automation-tabs" role="group" aria-label="自动化类型">
       <button type="button" data-automation="rules" aria-pressed="true" aria-controls="automation-rules">流程</button>
-      <button type="button" data-automation="flows" aria-pressed="false" aria-controls="automation-flows">导入的流程</button>
       <button type="button" data-automation="runs" aria-pressed="false" aria-controls="automation-runs">运行记录</button>
     </div>
     <section id="automation-rules">
-      <div class="section-heading"><p><a href="/help.html#automation">查看自动化指南</a></p><button id="new-schedule" type="button" class="secondary">＋ 新建自动化</button></div>
-      <div id="rule-list"></div><details id="legacy-schedules" class="task-log" hidden><summary>既有定时计划</summary><div id="schedule-list" class="capability-list"></div></details>
-    </section>
-    <section id="automation-flows" hidden>
-      <div class="section-heading"><p>运行已导入的流程，或在自动化中添加它们。</p><button id="import-ability" type="button" class="secondary">＋ 导入流程 JSON</button><input id="ability-file" type="file" accept="application/json,.json" hidden></div>
-      <div id="flow-list"></div>
+      <div class="section-heading"><p><a href="/help.html#automation">查看自动化指南</a></p><div class="actions"><button id="import-ability" type="button" class="secondary">导入流程</button><input id="ability-file" type="file" accept="application/json,.json" hidden><button id="new-schedule" type="button" class="primary">＋ 新建自动化</button></div></div>
+      <div id="rule-list"></div><details id="legacy-flows" class="task-log" hidden><summary>待迁移的旧流程</summary><div id="flow-list"></div></details><details id="legacy-schedules" class="task-log" hidden><summary>既有定时计划</summary><div id="schedule-list" class="capability-list"></div></details>
     </section>
     <section id="automation-runs" hidden>
       <div id="rule-runs"></div>
@@ -310,7 +305,7 @@
     </dialog>
 <dialog id="rule-dialog" class="drawer" aria-labelledby="rule-title">
   <form id="rule-form">
-    <div class="dialog-heading"><h2 id="rule-title">新建自动化</h2><button type="button" data-close aria-label="关闭">×</button></div>
+    <div class="dialog-heading"><h2 id="rule-title">新建自动化</h2><button type="button" data-close aria-label="关闭">×</button></div><p id="rule-import-note" class="muted" hidden></p>
     <label>名称<input name="name" maxlength="40" required></label>
     <h3>触发</h3>
     <label>触发方式<select name="trigger"><option value="manual">手动运行</option><option value="schedule">到指定时间</option><option value="entity">Home Assistant 设备状态变化</option></select></label>
@@ -395,8 +390,9 @@
     <div class="field-grid"><label>请求方法<select name="method"><option>GET</option><option>POST</option></select></label><label>固定请求地址<input name="endpoint" type="url" required placeholder="https://example.com/api/air"></label></div>
     <label>Bearer Token（可选）<input name="api_key" type="password" autocomplete="new-password"><small id="http-key-status"></small></label>
     <label class="check-label" id="http-clear-label" hidden><input name="clear_key" type="checkbox">清除已保存的凭证</label>
-    <label>返回值单位（可选）<input name="unit" maxlength="12" placeholder="例如 °C"></label>
-    <label>返回字段（可选）<input name="extract" placeholder="例如 data.aqi"><small>填写 JSON 字段路径。留空时读取响应正文。</small></label>
+    <details id="http-response"><summary>响应设置</summary>
+      <label>提取字段（可选）<input name="extract" placeholder="例如 items.0.status"><small>留空时使用完整响应。可填写点分隔路径或 JSON Pointer。</small></label>
+    </details>
     <fieldset><legend>调用参数</legend><div id="http-params"></div><button id="http-add-param" type="button" class="secondary">添加参数</button></fieldset>
     <label class="check-label"><input name="voice" type="checkbox">允许语音调用（GET）</label>
     <label class="check-label"><input name="automation" type="checkbox">可作为自动化动作</label>

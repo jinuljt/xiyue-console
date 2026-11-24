@@ -109,8 +109,7 @@ function renderTasks() {
   });
   tableContent('task-list',['事项','创建时间','状态','操作'],rows,'还没有待办。');
 }
-// These device-owned manifests predate the flow library. Imported manifests
-// contain only declarative steps and belong to the flow list.
+// System-owned manifests do not represent user-authored workflows.
 const builtinAbilityIDs = new Set(['todo', 'reminder', 'quick-timer']);
 const clockCapabilities = {
   timers: ['倒计时','按时长倒数，到点响铃。'],
@@ -176,7 +175,7 @@ function savedAbilityRow(a, inCenter = false) {
 function renderAbilities() {
   const abilities = Object.values(state.abilities).sort((a,b) => a.manifest.id.localeCompare(b.manifest.id));
   const custom = abilities.filter(a => a.manifest.menu && !builtinAbilityIDs.has(a.manifest.id));
-  const flows = abilities.filter(a => !a.manifest.menu && !builtinAbilityIDs.has(a.manifest.id));
+  const legacy = (state.legacy_flows || []).map(id=>state.abilities[id]).filter(Boolean);
   const roomBadge = capabilityStatus();
   roomBadge.id = 'room-audio-enabled';
   const roomRuntime = el('span');
@@ -205,7 +204,8 @@ function renderAbilities() {
   tableContent('ability-list',['名称','启用状态','运行情况','操作'],
     [roomRow,...clockRows,practiceRow,haRow,...custom.map(a=>savedAbilityRow(a,true)),...tools],
     '暂无能力。','capability-table ability-center-table');
-  renderCapabilityTable('flow-list',flows.filter(a=>a.manifest.id!=='guided-flow').map(a=>savedAbilityRow(a)),'还没有手动流程。');
+  $('legacy-flows').hidden=!legacy.length;
+  renderCapabilityTable('flow-list',legacy.map(a=>savedAbilityRow(a)),'');
   renderCapabilityMenus(custom);
   renderRoomAudioBadge();
 }
@@ -462,10 +462,10 @@ $('alarm-edit-cancel').addEventListener('click',()=>editAlarm());
 
 const repeatNames={once:'一次',daily:'每天',weekdays:'工作日'};
 const ruleActions={speak:'播报文字',wait:'等待一段时间',confirm:'播报并等待确认',timer:'启动响铃倒计时',
-  room_start:'开始远程听音',room_stop:'停止远程听音',flow:'运行已导入的流程',http_tool:'调用工具'};
+  room_start:'开始远程听音',room_stop:'停止远程听音',flow:'运行旧版流程',http_tool:'调用工具',if:'判断变量',tone:'播放提示音'};
 const ruleResults={running:'运行中',completed:'已完成',failed:'失败',skipped:'已跳过',interrupted:'已中断',cancelled:'已停止'};
 const ruleSources={manual:'手动',scheduled:'定时',entity:'设备状态变化'};
-const rulePhases={action:'正在执行动作',speech:'等待音箱播报',wait:'等待计时结束',confirm:'等待确认'};
+const rulePhases={action:'正在执行动作',speech:'等待音箱播报',wait:'等待计时结束',confirm:'等待确认',child:'等待旧版子流程'};
 let selectedAutomationRun;
 
 function renderAutomation() {
@@ -482,6 +482,7 @@ function renderAutomation() {
     },'secondary'),button(schedule.enabled?'停用':'启用',invoke(schedule.enabled?'disable':'enable'),'secondary'),
     button('删除',async()=>{if(window.confirm('删除这条自动化？'))await invoke('remove')();},'secondary')];
     if (running) actions.forEach(item=>{item.disabled=true;});
+    actions.push(button('导出',()=>exportWorkflow(rule),'secondary'));
     if (!timed && !schedule.enabled) actions[1].disabled=true;
     if (latest) actions.unshift(button('查看运行',()=>showAutomationRun(rule.id,latest.id),'secondary'));
     const trigger = timed ? repeatNames[schedule.repeat]+' · '+when(schedule.next_at,schedule.timezone) :
@@ -531,7 +532,17 @@ function renderAutomationRun() {
     },'primary');
     content.push(el('p','可在控制台确认，或唤醒音箱说「继续下一步」。'),buttonConfirm);
   }
-  if (run.status==='running' && ['wait','confirm'].includes(run.phase)) {
+  if (run.status==='running' && run.phase==='child') {
+    const child = state.tasks.find(task=>task.id===run.child_task_id);
+    if (child) content.push(el('p',child.title+' · '+(statusNames[child.status]||'')));
+    if (child?.status==='waiting') {
+      content.push(button('确认并继续',async()=>{
+        await api('/api/tasks/'+child.id+'/confirm','POST',{index:child.index,status:child.status});
+        await refresh();
+      },'primary'));
+    }
+  }
+  if (run.status==='running' && ['wait','confirm','child'].includes(run.phase)) {
     content.push(button('停止本次运行',async()=>{
       await api('/api/automation/'+rule.id+'/cancel','POST',{run_id:run.id});
       await refresh();
@@ -560,14 +571,14 @@ let ruleStepKey = 0;
 
 function appendRuleAction(step) {
   const container=$('rule-actions');
-  if(container.children.length>=8)return;
+  if(container.children.length>=64)return;
   const row=el('li',undefined,'rule-action-row');
   row.dataset.stepKey=String(++ruleStepKey);
   const top=el('div',undefined,'rule-step-heading');
   const choice=el('select');
   choice.setAttribute('aria-label','步骤动作');
   choice.required=true;
-  choice.append(new Option('选择动作',''),...Object.entries(ruleActions).map(([id,label])=>new Option(label,id)));
+  choice.append(new Option('选择动作',''),...Object.entries(ruleActions).filter(([id])=>id!=='flow'||step?.action==='flow').map(([id,label])=>new Option(label,id)));
   const params=el('div',undefined,'rule-params');
   const tools=el('div',undefined,'table-actions');
   function reorderButton(label, change) {
@@ -587,16 +598,18 @@ function appendRuleAction(step) {
       const value=el('input');
       value.name='value';
       value.required=choice.value!=='timer';
-      value.maxLength=choice.value==='timer'?40:330;
+      value.maxLength=choice.value==='timer'?40:1333;
+      if (choice.value==='speak'||choice.value==='confirm') value.placeholder='可引用前一步的变量，例如 {{order.status}}';
       value.value=initial?.value||'';
       const labels={timer:'名称（可选）',speak:'播报内容',confirm:'确认前播报的提示'};
       params.append(inputLabel(labels[choice.value],value));
     }
     if (['timer','wait','confirm'].includes(choice.value)) {
       const seconds=el('input');
-      seconds.name='seconds';seconds.type='number';seconds.min=1;seconds.max=86400;seconds.required=true;
-      seconds.value=initial?.seconds||60;
-      params.append(inputLabel(choice.value==='timer'?'倒计时秒数':'等待秒数',seconds));
+      seconds.name='seconds';seconds.type='number';seconds.min=choice.value==='confirm'?0:1;
+      seconds.max=choice.value==='wait'?604800:86400;seconds.required=true;
+      seconds.value=initial ? initial.seconds ?? (choice.value==='confirm'?0:60) : 60;
+      params.append(inputLabel(choice.value==='timer'?'倒计时秒数':choice.value==='confirm'?'等待秒数（0 表示一直等待）':'等待秒数',seconds));
     }
     if (choice.value==='confirm') {
       const timeout=el('select');timeout.name='on_timeout';
@@ -604,6 +617,24 @@ function appendRuleAction(step) {
       timeout.value=initial?.on_timeout||'stop';
       const next=el('select');next.dataset.ruleNext='';
       params.append(inputLabel('确认后',next),inputLabel('未及时确认时',timeout));
+    }
+    if (choice.value==='tone') {
+      const tone=el('select');tone.name='value';
+      tone.append(new Option('提示音','cue'),new Option('响铃音','alarm'));
+      tone.value=initial?.value||'cue';
+      params.append(inputLabel('提示音',tone));
+    }
+    if (choice.value==='if') {
+      const path=el('input');path.name='value';path.required=true;
+      path.placeholder='例如 order.status 或 result.items.0.ready';path.value=initial?.value||'';
+      const expected=el('input');expected.name='equals';expected.maxLength=1000;
+      const comparison=el('select');comparison.name='comparison';
+      comparison.append(new Option('文本','text'),new Option('数字、布尔值或空值','json'));
+      comparison.value=initial && typeof initial.equals!=='string'?'json':'text';
+      if (initial && 'equals' in initial) expected.value=comparison.value==='text'?initial.equals:JSON.stringify(initial.equals);
+      const target=el('select');target.dataset.ruleNext='';target.dataset.otherwise='';
+      params.append(inputLabel('变量或字段',path),inputLabel('值类型',comparison),inputLabel('等于',expected),
+        inputLabel('不相等时',target),el('small','相等时继续执行下一步。','muted'));
     }
     if (choice.value==='http_tool') {
       const selection=el('select');
@@ -615,9 +646,8 @@ function appendRuleAction(step) {
       const render=()=>{
         const tool=authorized.find(item=>item.id===selection.value);
         inputs.replaceChildren(...(tool?.parameters || []).map(param=>{
-          const input=param.type==='boolean'?el('select'):el('input');
-          if(param.type==='boolean')input.append(new Option('真','true'),new Option('假','false'));
-          if(param.type==='number'){input.type='number';input.step='any';}
+          const input=el('input');
+          input.placeholder=param.type==='boolean'?'true、false 或 {{变量}}':'参数值或 {{变量}}';
           input.dataset.networkArgument=param.name;
           input.required=true;
           if(tool.id===initial?.value && initial.parameters?.[param.name]!==undefined)input.value=initial.parameters[param.name];
@@ -625,14 +655,16 @@ function appendRuleAction(step) {
         }));
       };
       selection.onchange=render;
-      params.append(inputLabel('工具',selection),inputs);
+      const saveAs=el('input');saveAs.name='save_as';saveAs.maxLength=32;
+      saveAs.pattern='[A-Za-z_][A-Za-z0-9_]{0,31}';saveAs.placeholder='例如 order';saveAs.value=initial?.save_as||'';
+      params.append(inputLabel('工具',selection),inputs,inputLabel('结果变量名（可选）',saveAs));
       if (!authorized.length) params.append(el('p','请在能力中心为工具勾选「允许自动化调用」。','muted'));
       render();
     }
     if (choice.value==='flow') {
       const selection=el('select');
       selection.name='value';selection.required=true;
-      selection.append(new Option('选择已导入的流程',''));
+      selection.append(new Option('选择旧版流程',''));
       for(const a of Object.values(state.abilities)) {
         if(!a.enabled||builtinAbilityIDs.has(a.manifest.id)||a.manifest.id==='guided-flow'||
           a.manifest.fields.some(f=>f.required&&!a.config?.[f.key]&&!f.default))continue;
@@ -640,7 +672,7 @@ function appendRuleAction(step) {
       }
       selection.value=initial?.value||'';
       params.append(inputLabel('流程',selection));
-      if(selection.options.length===1) params.append(el('p','先导入并启用流程，填好它的必填参数。','muted'));
+      if(selection.options.length===1) params.append(el('p','此步骤引用旧版流程，请先启用它并配置必填参数。','muted'));
     }
     if (choice.value==='room_start' && !roomAudio?.config.source)
       params.append(el('p','先在能力中心保存远程听音的收音地址。','muted'));
@@ -659,7 +691,8 @@ function appendRuleAction(step) {
 
 function ruleStepDescription(step) {
   let description = ruleActions[step.action] || step.action;
-  if (step.action==='http_tool') return description+' · '+((networkConfig?.tools || []).find(t=>t.id===step.value)?.name || '工具');
+  if (step.action==='http_tool') return description+' · '+((networkConfig?.tools || []).find(t=>t.id===step.value)?.name || '工具')+(step.save_as?' · 保存为 '+step.save_as:'');
+  if (step.action==='if') return description+' · '+step.value+' 等于 '+JSON.stringify(step.equals)+(step.next?' · 不等时跳到第 '+step.next+' 步':' · 不等时结束');
   if (step.action==='flow') return description+' · '+(state.abilities[step.value]?.manifest.name || '流程');
   if (step.value) description += ' · '+step.value;
   if (step.seconds) description += ' · '+step.seconds+' 秒';
@@ -670,7 +703,7 @@ function ruleStepDescription(step) {
 
 function updateRuleActions() {
   const rows=[...$('rule-actions').children];
-  $('rule-add-action').disabled=rows.length>=8;
+  $('rule-add-action').disabled=rows.length>=64;
   $('rule-privacy-note').hidden=!rows.some(row=>row.querySelector('select').value==='room_start');
   rows.forEach((row,index)=>{
     const [up,down,remove]=row.querySelectorAll('.rule-step-heading button');
@@ -680,8 +713,10 @@ function updateRuleActions() {
     const next=row.querySelector('[data-rule-next]');
     if (!next) return;
     const previous=next.value;
-    next.replaceChildren(new Option('继续下一步',''),...rows.slice(index+2).map((target,i)=>
-      new Option('跳到第 '+(index+i+3)+' 步',target.dataset.stepKey)));
+    const otherwise = next.hasAttribute('data-otherwise');
+    const offset = otherwise?1:2;
+    next.replaceChildren(new Option(otherwise?'结束流程':'继续下一步',''),...rows.slice(index+offset).map((target,i)=>
+      new Option('跳到第 '+(index+i+offset+1)+' 步',target.dataset.stepKey)));
     if ([...next.options].some(option=>option.value===previous)) next.value=previous;
   });
   $('rule-preview').hidden=true;
@@ -700,35 +735,55 @@ function showRuleFields() {
     }
   }
 }
-async function openRule(rule) {
+async function openRule(rule, draft, toolNames = {}) {
   await Promise.all([loadNetworkConfig(),loadRoomAudio().catch(()=>{})]);
   ruleForm.reset();
   const fields=ruleForm.elements;
   editingRule=rule?.id||'';
-  $('rule-title').textContent=rule?'编辑自动化':'新建自动化';
+  $('rule-title').textContent=rule?'编辑自动化':draft?'编辑导入的流程':'新建自动化';
+  const note=$('rule-import-note');
+  note.hidden=!draft;
+  note.textContent='检查流程后保存。导入文件不会立即启动流程。';
   const next=new Date(rule?.schedule.next_at||0);
   fields.local_time.value=next.getTime()>Date.now()?localTimeValue(next):futureLocalTime();
-  const entityTools=(networkConfig?.tools||[]).filter(tool=>tool.kind==='ha' && tool.operation==='state' && tool.automation);
+  const authorized=(networkConfig?.tools||[]).filter(tool=>tool.automation);
+  const entityTools=authorized.filter(tool=>tool.kind==='ha' && tool.operation==='state');
+  if (draft) {
+    const missing=[];
+    const resolve=(id, choices)=>{
+      if (choices.some(tool=>tool.id===id)) return id;
+      const name=Object.hasOwn(toolNames,id)?toolNames[id]:'';
+      const matches=choices.filter(tool=>tool.name===name);
+      if (matches.length===1) return matches[0].id;
+      missing.push(name||'未知工具');
+      return '';
+    };
+    draft.actions=draft.actions.map(step=>step.action==='http_tool'?{...step,value:resolve(step.value,authorized)}:step);
+    if (draft.trigger==='entity') draft.entity_tool=resolve(draft.entity_tool,entityTools);
+    if (missing.length) note.textContent+=' 请重新选择 '+[...new Set(missing)].join('、')+'。';
+    fields.local_time.value=draft.local_time||'';
+  }
   fields.entity_tool.replaceChildren(new Option('选择设备状态工具',''),...entityTools.map(tool=>new Option(tool.name,tool.id)));
   $('rule-entity-note').hidden=entityTools.length>0;
-  $('rule-use-hours').checked=Boolean(rule?.after);
-  if(rule) {
-    fields.name.value=rule.name;
-    fields.trigger.value=rule.trigger||'schedule';
-    fields.repeat.value=rule.schedule.repeat||'daily';
-    fields.condition.value=rule.condition||'';
-    fields.entity_tool.value=rule.entity_tool||'';
-    fields.to_state.value=rule.to_state||'';
-    fields.after.value=rule.after||'';
-    fields.before.value=rule.before||'';
+  const source = rule || draft;
+  $('rule-use-hours').checked=Boolean(source?.after);
+  if(source) {
+    fields.name.value=source.name;
+    fields.trigger.value=source.trigger||'schedule';
+    fields.repeat.value=source.schedule?.repeat||source.repeat||'daily';
+    fields.condition.value=source.condition||'';
+    fields.entity_tool.value=source.entity_tool||'';
+    fields.to_state.value=source.to_state||'';
+    fields.after.value=source.after||'';
+    fields.before.value=source.before||'';
   }
   showRuleFields();
   ruleForm.querySelector('.form-error').textContent='';
   $('rule-actions').replaceChildren();
-  if(rule) {
-    rule.actions.forEach(appendRuleAction);
+  if(source) {
+    source.actions.forEach(appendRuleAction);
     const rows=[...$('rule-actions').children];
-    rule.actions.forEach((step,index)=>{
+    source.actions.forEach((step,index)=>{
       const next=rows[index].querySelector('[data-rule-next]');
       if (step.next && next) next.value=rows[step.next-1]?.dataset.stepKey || '';
     });
@@ -741,7 +796,7 @@ function readRule() {
   const rows=[...$('rule-actions').children];
   const actions=rows.map(row=>{
     const step={action:row.querySelector('select').value};
-    for (const key of ['value','on_timeout']) {
+    for (const key of ['value','on_timeout','save_as']) {
       const field=row.querySelector('[name='+key+']');
       if(field)step[key]=field.value;
     }
@@ -749,6 +804,11 @@ function readRule() {
     if(seconds)step.seconds=seconds.valueAsNumber;
     const next=row.querySelector('[data-rule-next]')?.value;
     if(next)step.next=rows.findIndex(target=>target.dataset.stepKey===next)+1;
+    if(step.action==='if') {
+      const literal=row.querySelector('[name=equals]').value;
+      try {step.equals=row.querySelector('[name=comparison]').value==='json'?JSON.parse(literal):literal;}
+      catch {throw new Error('判断值请输入有效数字、true、false 或 null');}
+    }
     if(step.action==='http_tool')step.parameters=Object.fromEntries([...row.querySelectorAll('[data-network-argument]')].map(input=>[input.dataset.networkArgument,input.value]));
     return step;
   });
@@ -762,7 +822,7 @@ ruleForm.elements.trigger.onchange=showRuleFields;
 $('rule-use-hours').onchange=showRuleFields;
 ruleForm.addEventListener('input',()=>$('rule-preview').hidden=true);
 $('rule-add-action').addEventListener('click',()=>appendRuleAction());
-$('rule-preview-button').onclick=()=>{
+$('rule-preview-button').onclick=()=>handle(()=>{
   if (!ruleForm.reportValidity()) return;
   const draft=readRule();
   const list=el('ol',undefined,'automation-preview-list');
@@ -772,7 +832,7 @@ $('rule-preview-button').onclick=()=>{
   preview.replaceChildren(el('h4','执行顺序预览'),el('p',trigger+(draft.after?' · '+draft.after+' 至 '+draft.before:'')),
     list,el('small','此处只显示流程，保存后可在列表中立即运行。','muted'));
   preview.hidden=false;
-};
+});
 ruleForm.addEventListener('submit',event=>submitForm(event,async()=>{
   await api(editingRule?'/api/automation/'+editingRule:'/api/automation',editingRule?'PUT':'POST',readRule());
 }));
@@ -927,20 +987,42 @@ $('config-run').addEventListener('click', () => {
 $('config-form').addEventListener('input', () => {$('config-run').disabled = true;});
 $('new-task').addEventListener('click', () => openTask());
 $('new-schedule').addEventListener('click', event => handle(() => openRule(),event.currentTarget));
+function exportWorkflow(rule) {
+  const trigger=rule.trigger||'schedule';
+  const workflow={name:rule.name,trigger,condition:rule.condition||'',after:rule.after||'',before:rule.before||'',actions:rule.actions};
+  if(trigger==='schedule') Object.assign(workflow,{
+    local_time:localTimeValue(new Date(rule.schedule.next_at),rule.schedule.timezone),repeat:rule.schedule.repeat
+  });
+  if(trigger==='entity') Object.assign(workflow,{entity_tool:rule.entity_tool,to_state:rule.to_state});
+  const used=new Set([rule.entity_tool,...rule.actions.filter(step=>step.action==='http_tool').map(step=>step.value)]);
+  const tools=Object.fromEntries((networkConfig?.tools||[]).filter(tool=>used.has(tool.id)).map(tool=>[tool.id,tool.name]));
+  const blob=new Blob([JSON.stringify({format:'xiyue-automation',version:1,workflow,tools},null,2)+'\n'],{type:'application/json'});
+  const link=el('a');
+  link.href=URL.createObjectURL(blob);
+  link.download='喜悦流程-'+rule.name.replace(/[\\/:*?"<>|]/g,'-')+'.json';
+  link.click();
+  setTimeout(()=>URL.revokeObjectURL(link.href),1000);
+}
+
 $('import-ability').addEventListener('click', () => $('ability-file').click());
 $('ability-file').addEventListener('change', () => handle(async () => {
   const file = $('ability-file').files[0]; if (!file) return;
   try {
     if (file.size > 128 * 1024) throw new Error('流程文件不能超过 128 KB');
-    const manifest = JSON.parse(await file.text());
-    if (builtinAbilityIDs.has(manifest?.id)) throw new Error('此流程使用了系统保留的 ID');
-    const {id} = await api('/api/abilities', 'POST', manifest);
-    await refresh();
-    showAutomation('flows');
-    if (state.abilities[id]) openConfig(id);
-    toast('流程已导入');
-  }
-  finally {$('ability-file').value = '';}
+    const data = JSON.parse(await file.text());
+    let draft;
+    if (data?.format==='xiyue-automation') {
+      if (data.version!==1) throw new Error('此流程文件的版本暂不支持');
+      draft=data.workflow;
+    } else if (Array.isArray(data?.steps)) {
+      draft=await api('/api/automation/convert-legacy','POST',data);
+    }
+    if (!draft || typeof draft.name!=='string' || !['manual','schedule','entity'].includes(draft.trigger) ||
+      !Array.isArray(draft.actions) || draft.actions.length<1 || draft.actions.length>64 ||
+      draft.actions.some(step=>!step || !Object.hasOwn(ruleActions,step.action)))
+      throw new Error('文件不符合喜悦流程格式');
+    await openRule(null,draft,data.tools||{});
+  } finally {$('ability-file').value = '';}
 }));
 document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => b.closest('dialog').close()));
 document.querySelectorAll('[data-page]').forEach(b => b.addEventListener('click', () => {location.hash = b.dataset.page;}));
@@ -1935,7 +2017,7 @@ $('dialogue-clear').addEventListener('click',()=>handle(async()=>{
 },$('dialogue-clear')));
 function loadViewData() {
   if (consoleView==='usage') loadUsage();
-  if (!networkConfig && (consoleView==='abilities' || location.hash==='#settings/search')) handle(loadNetworkConfig);
+  if (!networkConfig && (consoleView==='abilities' || consoleView==='automation' || location.hash==='#settings/search')) handle(loadNetworkConfig);
   if (consoleView==='dialogues' || location.hash==='#settings/privacy') handle(loadDialogues);
 }
 
@@ -2192,12 +2274,13 @@ async function openHTTP(tool) {
   editingNetworkTool = tool?.id || '';
   httpForm.reset();
   $('http-result').hidden = true;
+  $('http-response').open = Boolean(tool?.extract);
   $('http-params').replaceChildren();
   $('http-add-param').disabled = false;
   const keySaved = networkConfig.tool_keys[editingNetworkTool];
   $('http-key-status').textContent = keySaved ? '已保存，留空保留。' : '';
   $('http-clear-label').hidden = !keySaved;
-  for (const key of ['name','description','method','endpoint','extract','unit']) {
+  for (const key of ['name','description','method','endpoint','extract']) {
     if (tool?.[key]) httpForm.elements[key].value = tool[key];
   }
   httpForm.elements.voice.checked = Boolean(tool?.voice);
@@ -2210,7 +2293,7 @@ $('http-open').onclick = event => handle(() => openHTTP(),event.currentTarget);
 function httpPayload() {
   const form = httpForm.elements;
   const payload = {kind: 'http', voice:form.voice.checked, automation:form.automation.checked, clear_key:form.clear_key.checked};
-  for (const key of ['name','description','endpoint','method','extract','unit','api_key']) payload[key] = form[key].value.trim();
+  for (const key of ['name','description','endpoint','method','extract','api_key']) payload[key] = form[key].value.trim();
   payload.parameters = [...$('http-params').children].map(row => ({
     name: row.querySelector('[data-param-name]').value,
     type: row.querySelector('[data-param-type]').value
