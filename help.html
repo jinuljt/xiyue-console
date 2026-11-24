@@ -126,20 +126,21 @@
     </section>
     <section id="tts" hidden>
       <h2>语音合成 TTS</h2>
-      <p>DeepSeek 有海星和暗潮两种音色，自动从文本识别语种。为语音合成填写 DeepSeek API Key 后，可选语言并试听。音箱自带语音可试听英文、日文和韩文，实际兼容性以该型号和固件的试听为准。</p>
+      <p>DeepSeek 有海星和暗潮两种音色，自动从文本识别语种。为语音合成填写 DeepSeek API Key 后，可选语言并试听。音箱自带语音当前用于普通话对话。</p>
       <p><a href="https://api-docs.deepseek.com/zh-cn/guides/tts/">DeepSeek 语音合成官方文档</a></p>
       <p>默认使用音箱系统语音，无需额外账号或密钥。点击「验证」可让音箱播报一句测试语。设备端语音启用后，语音请求的模型回复由系统服务播报。</p>
-      <p>如需更换音色，在豆包语音开通语音合成模型 2.0，从音色库复制音色 ID。回到喜悦选择「豆包语音合成」，填写音色和对应的豆包语音 API Key。此选项需要设备提供 PCM 播放。播报时会将文字发送到豆包语音。<a href="https://docs.volcengine.com/docs/doubao-voice/unidirectional-streaming-text-to-speech-http?lang=zh">豆包语音合成官方文档</a></p>
+      <p>如需更换音色，在豆包语音开通语音合成模型 2.0，回到喜悦选择「豆包语音合成」，按名称选音色并填写豆包语音 API Key。已有或自定义音色可在高级设置填入 ID。此选项需要设备提供 PCM 播放。播报时会将文字发送到豆包语音。<a href="https://docs.volcengine.com/docs/doubao-voice/unidirectional-streaming-text-to-speech-http?lang=zh">豆包语音合成官方文档</a></p>
     </section>
     <section id="dialogue-languages" hidden>
       <h2>对话语言与外语陪练</h2>
-      <h3>让喜悦用其他语言回答</h3>
+      <h3>用同一种语言说话和听回复</h3>
       <ol>
-        <li>进入「系统配置 → 语音与语言 → 语音合成」。系统语音当前只开放普通话对话，其他语言可在系统语音的「试听」中验证。</li>
-        <li>选择支持目标语言的服务和音色。例如英语或日语可用 DeepSeek 的海星、暗潮，或豆包的 Vivi 2.0。按语音合成指南填写 API Key 并试听。</li>
-        <li>在同一页「对话语言」选择默认回答语言，保存语音设置。直连模型或混合模式下，也可以在某一轮说「这题用英文回答」。</li>
+        <li>进入「系统配置 → 语音与语言」。普通话是默认语言，使用音箱系统语音即可。</li>
+        <li>如果要用英语，可选豆包实时识别和支持英语的音色。如果要用日语，可选自建 SenseVoice 和豆包 Vivi 2.0，也可选支持日语的 DeepSeek 音色。西语目前缺少已接入的识别服务。</li>
+        <li>在「对话语言」选目标语言，下拉框会说明识别或播报哪一端不支持。</li>
+        <li>点「试说一句」，对着音箱问一个普通问题。页面会显示转写、模型回复和音箱的播报结果。支持试用当前输入的设置，满意后再保存。</li>
       </ol>
-      <p><a href="#tts">语音合成设置与密钥说明</a></p>
+      <p><a href="#asr">语音识别配置指南</a> · <a href="#tts">语音合成配置指南</a></p>
       <h3>和喜悦练习口语</h3>
       <ol>
         <li>配置能识别目标语言的 ASR。英语可用豆包实时识别或自建 SenseVoice。日语、韩语、粤语可用自建 SenseVoice。</li>

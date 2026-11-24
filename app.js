@@ -1341,12 +1341,16 @@ function updateASRFields() {
   $('asr-cloud-note').hidden = !cloud;
   $('asr-guide').href = '/help.html#' + (cloud ? 'asr-doubao' : 'asr-sensevoice');
 }
-$('asr-provider').addEventListener('change', updateASRFields);
+$('asr-provider').addEventListener('change', () => {
+  updateASRFields();
+  updateDialogueOptions();
+});
 let dialogueCatalog;
+let dialogueProbeRunning=false;
 let previousTTSProvider = '';
 function draftTTSVoice() {
   const provider = $('tts-provider').value;
-  if (provider === 'doubao') return $('tts-voice').value.trim();
+  if (provider === 'doubao') return $('tts-voice-preset').value==='custom' ? $('tts-voice').value.trim() : $('tts-voice-preset').value;
   if (provider === 'deepseek') return $('tts-deepseek-voice').value;
   return '';
 }
@@ -1366,38 +1370,63 @@ function updateTTSFields() {
     ? (provider === savedSettings.tts.provider ? '已保存，留空则保留。' : '更换服务时请填写新密钥，或清除原有密钥。') : '';
   $('tts-key-title').textContent = (provider === 'deepseek' ? 'DeepSeek' : '豆包语音')+' API Key';
   $('tts-cloud-note').textContent = cloud ? '回复和提醒的文字会发送给' + (provider === 'deepseek' ? ' DeepSeek。' : '豆包语音。') : '';
-  if (provider === 'doubao' && !$('tts-voice').value) $('tts-voice').value = providerOptions.tts.find(item => item.id === 'doubao')?.model || '';
   updateDialogueOptions();
-}
-function setLanguageOptions(select, languages, selected, reset = '') {
-  select.replaceChildren(...dialogueCatalog.languages.filter(item=>languages.includes(item.id)).map(item=>new Option(item.name,item.id)));
-  if (languages.includes(selected)) select.value = selected;
-  else if (reset) select.value = reset;
-  else {select.prepend(new Option('请重新选择回答语言','')); select.value = '';}
 }
 function updateDialogueOptions() {
   if (!dialogueCatalog || !savedSettings) return;
+  const language = $('dialogue-language');
+  const selected = language.value || 'zh';
   const provider = $('tts-provider').value;
-  const languages = dialogueCatalog.voices[provider]?.[draftTTSVoice()] || dialogueCatalog.tts[provider] || ['zh'];
-  const replies = $('reply-language');
-  setLanguageOptions(replies, languages, replies.value);
-  const missing = dialogueCatalog.languages.filter(item => !languages.includes(item.id)).map(item => item.name);
-  const note = provider === 'system' ? '音箱系统语音当前仅开放普通话。切换到支持目标语言的语音合成服务和音色后即可选择。' :
-    missing.length ? '当前语音合成服务或音色不支持：'+missing.join('、')+'。更换支持目标语言的服务和音色后即可选择。' : '';
-  $('reply-language-note').textContent = savedSettings.mode === 'external' ?
-    '当前为仅外部 Agent 模式。默认回答语言适用于直连大模型和混合模式。 '+note : note;
-  const preview = $('tts-preview-language');
-  setLanguageOptions(preview, provider === 'system' ? ['zh','en','ja','ko'] : languages, preview.value, 'zh');
-  updatePreviewNote();
-}
-function updatePreviewNote() {
-  const experiment = $('tts-provider').value === 'system' && $('tts-preview-language').value !== 'zh';
-  $('tts-preview-note').textContent = experiment ? '系统语音的外语能力待验证。这次会把外语原文交给音箱播报。' : '';
+  const presets = dialogueCatalog.presets[provider] || [];
+  const allTTS = new Set([...(dialogueCatalog.tts[provider]||[]),
+    ...presets.flatMap(voice=>dialogueCatalog.voices[provider]?.[voice.id] || [])]);
+  const asr = dialogueCatalog.asr[$('asr-provider').value]||[];
+  const external = savedSettings.mode==='external';
+  const reason = id => {
+    if (id==='zh') return '';
+    if (external) return '当前为仅外部 Agent 模式';
+    const unavailable = [];
+    if (!asr.includes(id)) unavailable.push('识别不支持');
+    if (!allTTS.has(id)) unavailable.push('播报不支持');
+    return unavailable.join('、');
+  };
+  language.replaceChildren(...dialogueCatalog.languages.map(item=>{
+    const problem=reason(item.id);
+    const option=new Option(item.name+(problem?'（'+problem+'）':''),item.id);
+    option.disabled=Boolean(problem);
+    return option;
+  }));
+  language.value = dialogueCatalog.languages.some(item=>item.id===selected)?selected:'zh';
+  language.setCustomValidity(reason(language.value)?'请选择当前识别和播报同时支持的对话语言':'');
+  const asrName=$('asr-provider').selectedOptions[0]?.textContent;
+  const ttsName=$('tts-provider').selectedOptions[0]?.textContent;
+  $('dialogue-language-note').textContent = reason(language.value) ?
+    '当前语言不可用，请更换服务或选择其它语言。' :
+    (external?'仅外部 Agent 模式按普通话配置。试说一句需要直连大模型。':
+      '当前使用 '+asrName+'听写，'+ttsName+'播报。');
+  const choice=$('tts-voice-preset');
+  const previous=choice.value;
+  const compatible=presets.filter(voice=>(dialogueCatalog.voices[provider]?.[voice.id] || []).includes(language.value));
+  if (provider==='doubao') {
+    const customVoice=new Option('自定义音色…','custom');
+    customVoice.disabled=language.value!=='zh';
+    choice.replaceChildren(...compatible.map(voice=>new Option(voice.name,voice.id)),customVoice);
+    const keep=compatible.some(voice=>voice.id===previous) || (previous==='custom' && language.value==='zh');
+    choice.value=keep?previous:compatible[0]?.id||'custom';
+  }
+  const custom = provider==='doubao' && choice.value==='custom';
+  $('tts-voice-advanced').hidden = !custom;
+  $('tts-voice').required = custom;
+  $('tts-voice').disabled = !custom;
+  if (custom) $('tts-voice-advanced').open = true;
+  const currentTTS = dialogueCatalog.voices[provider]?.[draftTTSVoice()] || dialogueCatalog.tts[provider] || [];
+  const unsupported = !currentTTS.includes(language.value);
+  choice.setCustomValidity(provider==='doubao' && unsupported && !reason(language.value) ? '请选择支持此语言的豆包音色' : '');
+  $('dialogue-probe').disabled = dialogueProbeRunning || external || Boolean(reason(language.value)) || unsupported;
+  $('tts-verify').disabled = unsupported;
 }
 $('tts-provider').addEventListener('change', updateTTSFields);
-$('tts-preview-language').addEventListener('change', updatePreviewNote);
-for (const id of ['tts-voice','tts-deepseek-voice']) {
-  $(id).addEventListener('input', updateDialogueOptions);
+for (const id of ['dialogue-language','tts-voice-preset','tts-deepseek-voice','tts-voice']) {
   $(id).addEventListener('change', updateDialogueOptions);
 }
 const timezoneLabels = {'Asia/Shanghai':'中国 · 北京、上海','Asia/Hong_Kong':'香港','Asia/Taipei':'台北',
@@ -1514,7 +1543,10 @@ function fillSettings(config, scope) {
     $('tts-provider').value = ['doubao','deepseek'].includes(config.tts.provider) ? config.tts.provider : 'system';
     previousTTSProvider = $('tts-provider').value;
     $('tts-deepseek-voice').value = config.tts.model === 'tide' ? 'tide' : 'stella';
-    $('tts-voice').value = config.tts.provider === 'doubao' ? config.tts.model : '';
+    const doubaoVoice = config.tts.provider==='doubao'?config.tts.model:'';
+    const knownVoice = dialogueCatalog.presets.doubao.some(preset=>preset.id===doubaoVoice);
+    $('tts-voice').value = knownVoice?'':doubaoVoice;
+    $('tts-voice-preset').replaceChildren(new Option('',knownVoice?doubaoVoice:doubaoVoice?'custom':''));
     $('tts-key').value = '';
     $('tts-clear').checked = false;
     $('tts-key-configured').textContent = config.tts.key_configured ? '已保存，留空则保留。' : '';
@@ -1525,7 +1557,7 @@ function fillSettings(config, scope) {
     $('asr-clear').checked = false;
     $('asr-clear-label').hidden = !config.asr.key_configured;
     $('asr-key-configured').textContent = config.asr.key_configured ? '已保存凭证，留空则保留。' : '';
-    $('reply-language').replaceChildren(new Option('', config.reply_language || 'zh'));
+    $('dialogue-language').replaceChildren(new Option('', config.reply_language || 'zh'));
     updateTTSFields();
   }
   if (!scope || scope === 'device') {
@@ -1673,16 +1705,48 @@ async function verifySettings(service, output) {
   output.textContent = service === 'asr' ? '正在录音，请对音箱说一句话…' : service === 'tts' ? '正在让音箱播报…' : '正在验证…';
   try {
     const payload = {service, config:serviceFormValues(service)};
-    if (service === 'tts') payload.language = $('tts-preview-language').value;
+    if (service === 'tts' || service === 'asr') payload.language = $('dialogue-language').value;
     const result = await api('/api/settings/verify', 'POST', payload);
     if (service === 'asr') output.textContent = '识别结果 · ' + result.text;
-    else if (service === 'tts') output.textContent = '已提交播报，请确认音箱有声音。';
+    else if (service === 'tts') output.textContent = '播报完成。';
     else output.textContent = `验证成功 · ${result.duration_ms} ms`;
   } catch (error) {
     output.textContent = '验证失败 · ' + error.message;
   }
   await refresh();
 }
+$('dialogue-probe').addEventListener('click', () => {
+  dialogueProbeRunning=true;
+  $('dialogue-probe').disabled=true;
+  const output = $('dialogue-probe-result');
+  output.hidden=false;
+  output.replaceChildren(el('p','正在录音，请对音箱说一句话…','muted'));
+  handle(async()=>{
+    try {
+      const result=await api('/api/settings/verify','POST',{
+        service:'dialogue',language:$('dialogue-language').value,asr:serviceFormValues('asr'),tts:serviceFormValues('tts')
+      });
+      const name=dialogueCatalog.languages.find(item=>item.id===result.language)?.name || result.language;
+      const messages=[
+        ['音箱识别成',result.transcript || (result.stage==='asr'?'识别未完成':'—')],
+        ['喜悦回答',result.reply || '—'],
+        ['音箱播报',result.stage==='completed'?'已完成 · '+result.voice:result.stage==='playback'?'未完成 · '+result.voice:'—']
+      ];
+      const trace=el('dl',undefined,'dialogue-probe-steps');
+      for(const [label,text] of messages) trace.append(el('dt',label),el('dd',text));
+      output.replaceChildren(el('p','本轮配置 · '+name,'muted'),trace);
+      if(result.error) {
+        const stage={asr:'识别',model:'回答',playback:'播报'}[result.stage];
+        output.append(el('p',stage+'失败 · '+result.error,'form-error'));
+      }
+    } catch(error) {
+      output.replaceChildren(el('p',error.message,'form-error'));
+    } finally {
+      dialogueProbeRunning=false;
+      updateDialogueOptions();
+    }
+  });
+});
 for (const service of ['asr', 'tts']) {
   const control = $(`${service}-verify`);
   control.addEventListener('click', () => handle(() => verifySettings(service, $(`${service}-verify-result`)), control));
@@ -1698,7 +1762,7 @@ function updateSettingsSaveBars() {
 for (const scope of ['device','voice','model']) {
   const form = $(`settings-${scope}-form`);
   function markDirty(event) {
-    if ((event.target === timezoneInput && event.type==='input') || event.target.id==='tts-preview-language') return;
+    if ((event.target === timezoneInput && event.type==='input')) return;
     settingsDirty.add(scope);
     settingsEditCount[scope]=(settingsEditCount[scope]||0)+1;
     updateSettingsSaveBars();
@@ -1716,7 +1780,7 @@ for (const scope of ['device','voice','model']) {
     try {
       const payload={scope,revision:settingsRevision};
       if (scope==='device') Object.assign(payload,{wake_word:$('setting-wake').value,timezone:chosenTimezone});
-      if (scope==='voice') Object.assign(payload,{asr:serviceFormValues('asr'),tts:serviceFormValues('tts'),reply_language:$('reply-language').value});
+      if (scope==='voice') Object.assign(payload,{asr:serviceFormValues('asr'),tts:serviceFormValues('tts'),reply_language:$('dialogue-language').value});
       if (scope==='model') Object.assign(payload,{mode:$('setting-mode').value,llm:serviceFormValues('llm'),external:serviceFormValues('external')});
       const config=await api('/api/settings','PUT',payload);
       if (settingsEditCount[scope]===submittedEdits) {
@@ -2202,8 +2266,13 @@ async function loadDialogues() {
         $('dialogue-detail').close();
         await loadDialogues();
       },'secondary');
+      const code=item.timing.language;
+      const language=code==='zh'?'普通话':code?new Intl.DisplayNames('zh-CN',{type:'language'}).of(code):'';
+      const playback=item.timing.stage==='completed'?'已完成':item.timing.stage==='playback'?'未完成':'—';
+      const meta=[language,item.timing.voice].filter(Boolean).join(' · ');
       $('dialogue-detail-body').replaceChildren(el('p',when(item.at)+' · '+stage,'muted'),
-        el('h3','用户'),el('p',item.transcript||'未取得识别文本。'),el('h3','喜悦 Voice'),el('p',item.reply||'—'),duration,remove);
+        el('h3','音箱识别成'),el('p',item.transcript||'未取得识别文本。'),el('h3','喜悦回答'),el('p',item.reply||'—'),
+        el('h3','音箱播报'),el('p',meta?playback+' · '+meta:playback),duration,remove);
       $('dialogue-detail').showModal();
     },'secondary');
     return [when(item.at),short(item.transcript),short(item.reply),el('span',stage,item.timing.stage==='completed'?'badge':'badge paused'),[show]];
