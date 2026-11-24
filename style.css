@@ -208,7 +208,6 @@ dialog.drawer .field-grid { grid-template-columns: 1fr; }
 #http-tool-form fieldset { min-width: 0; border: 1px solid var(--line); border-radius: var(--radius); }
 .network-parameter { display: grid; align-items: end; grid-template-columns: repeat(3,minmax(0,1fr)) auto; gap: 6px; margin-bottom: 7px; }
 .network-parameter label { min-width: 0; margin: 0; }
-#weather-form { padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px solid var(--line); }
 .password-strength { display: flex; align-items: center; gap: 8px; font-size: 12px; margin: 4px 0 12px; }
 .strength-bar { width: 72px; height: 5px; border-radius: 4px; }
 .password-strength[data-level="weak"] { color: var(--danger); }
@@ -235,6 +234,13 @@ dialog.drawer .field-grid { grid-template-columns: 1fr; }
 .activity-legend { display: flex; flex-wrap: wrap; gap: 8px; }
 .activity-legend i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 4px; }
 .usage-trend { margin-block: 10px; }
+.dialogue-filters { align-items: end; margin-bottom: 16px; }
+.dialogue-filters .form-error:not(:empty) { flex-basis: 100%; }
+.dialogue-filters .form-error:empty { display: none; }
+.dialogue-table :is(th,td):is(:first-child,:nth-child(4),:last-child) { white-space: nowrap; }
+.dialogue-table :is(th,td):first-child { width: 120px; }
+.dialogue-table :is(th,td):nth-child(2), .dialogue-table :is(th,td):nth-child(3) { width: 35%; }
+.dialogue-table td { overflow-wrap: anywhere; }
 .dialogue-entry { border-top: 1px solid var(--line); padding-block: 8px; overflow-wrap: anywhere; }
 .clock-form { display: flex; gap: 8px; align-items: end; flex-wrap: wrap; }
 .clock-form label { margin: 0; }

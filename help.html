@@ -36,6 +36,7 @@
         <a href="#asr-sensevoice">自建 SenseVoice</a>
       </details>
       <a href="#tts">语音合成</a>
+      <a href="#dialogue-languages">对话语言与外语陪练</a>
       <a href="#network-tools">网页搜索与连接工具</a>
       <a href="#external">连接已有助手</a>
     </nav>
@@ -124,12 +125,28 @@
     </section>
     <section id="tts" hidden>
       <h2>语音合成 TTS</h2>
-      <p>在「系统配置 → 语音与语言 → 对话语言」选择默认回答语言。可用语种跟随语音合成服务和音色变化。你也可以在对话中说「这题用英文回答」。</p>
       <p>DeepSeek 有海星和暗潮两种音色，自动从文本识别语种。为语音合成填写 DeepSeek API Key 后，可选语言并试听。音箱自带语音可试听英文、日文和韩文，实际兼容性以该型号和固件的试听为准。</p>
-      <p>在「能力中心 → 外语陪练」启用功能并选择语言。列表只展示已保存的语音识别和音色都支持的语种。启用后说「陪我练口语，模拟点咖啡」；想回到日常对话时说「退出陪练」。陪练会针对听到的转写纠正表达和语法。</p>
       <p><a href="https://api-docs.deepseek.com/zh-cn/guides/tts/">DeepSeek 语音合成官方文档</a></p>
       <p>默认使用音箱系统语音，无需额外账号或密钥。点击「验证」可让音箱播报一句测试语。设备端语音启用后，语音请求的模型回复由系统服务播报。</p>
       <p>如需更换音色，在豆包语音开通语音合成模型 2.0，从音色库复制音色 ID。回到喜悦选择「豆包语音合成」，填写音色和对应的豆包语音 API Key。此选项需要设备提供 PCM 播放。播报时会将文字发送到豆包语音。<a href="https://docs.volcengine.com/docs/doubao-voice/unidirectional-streaming-text-to-speech-http?lang=zh">豆包语音合成官方文档</a></p>
+    </section>
+    <section id="dialogue-languages" hidden>
+      <h2>对话语言与外语陪练</h2>
+      <h3>让喜悦用其他语言回答</h3>
+      <ol>
+        <li>进入「系统配置 → 语音与语言 → 语音合成」。系统语音当前只开放普通话对话，其他语言可在系统语音的「试听」中验证。</li>
+        <li>选择支持目标语言的服务和音色。例如英语或日语可用 DeepSeek 的海星、暗潮，或豆包的 Vivi 2.0。按语音合成指南填写 API Key 并试听。</li>
+        <li>在同一页「对话语言」选择默认回答语言，保存语音设置。直连模型或混合模式下，也可以在某一轮说「这题用英文回答」。</li>
+      </ol>
+      <p><a href="#tts">语音合成设置与密钥说明</a></p>
+      <h3>和喜悦练习口语</h3>
+      <ol>
+        <li>配置能识别目标语言的 ASR。英语可用豆包实时识别或自建 SenseVoice。日语、韩语、粤语可用自建 SenseVoice。</li>
+        <li>换用能播报同一语言的音色。例如日语可用 DeepSeek 或豆包 Vivi 2.0，韩语和粤语可用 DeepSeek。验证后保存语音设置。</li>
+        <li>在「系统配置」启用直连大模型或混合模式，再进入「能力中心 → 外语陪练」，选择语言并启用。</li>
+      </ol>
+      <p>说「陪我练口语，模拟点咖啡」即可进入陪练。说「退出陪练」可回到日常对话。</p>
+      <p><a href="#asr-doubao">配置豆包实时识别</a> · <a href="#asr-sensevoice">部署与配置 SenseVoice</a></p>
     </section>
     <section id="network-tools" hidden>
       <h2>网页搜索与连接工具</h2>
@@ -139,7 +156,7 @@
       <h3>Home Assistant</h3>
       <p>在 Home Assistant 的个人资料页创建长期访问令牌。在「能力中心 → Home Assistant」填写服务根地址和令牌。保存连接后，选择一个实体和要开放的操作。读状态可开放给语音，灯和开关的开关动作可添加到自动化。</p>
       <h3>自定义 HTTP 工具</h3>
-      <p>打开「能力中心 → 添加工具 → 查当前气温」，选择城市后可以试运行，再添加到能力列表。个人非商业用途可使用 Open-Meteo 的公开接口。<a href="https://open-meteo.com/en/docs">Open-Meteo 文档</a></p>
+      <p>在「能力中心」打开预置的「HTTP 测试工具」，点「试运行」查看音箱的示例响应。要接入自己的 API，点「以此为模板添加工具」，或直接点「添加工具」打开通用表单。</p>
       <p>填写固定地址、用途、GET 或 POST，以及接口需要的参数。GET 参数会附到 URL 的查询字符串，POST 参数会作为 JSON 对象发送。可以给每个参数选择文本、数字或布尔值。试运行时填写示例，可直接查看返回；如只想读取某一项，填写类似 data.aqi 的 JSON 路径。</p>
       <p>保存后，勾选允许语音调用的 GET 工具可在对话中使用。勾选开放给自动化后，可在规则中添加「调用连接工具」并填写该规则的参数值。语音调用时，所选的工具返回内容会传给已配置的对话模型整理。</p>
     </section>

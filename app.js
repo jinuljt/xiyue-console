@@ -25,7 +25,7 @@ const titles = {
   abilities: ['能力中心', '查看和配置音箱提供的能力。'],
   'device-status': ['设备状态', '查看语音助手当前状态和服务最近一次调用结果。'],
   usage: ['用量', '查看第三方服务调用和费用估算。'],
-  dialogues: ['对话记录', '按日期查看语音对话。'],
+  dialogues: ['对话记录', '按日期范围查看语音对话。'],
   tasks: ['待办', '记录和完成要做的事。'],
   timers: ['倒计时', '开始倒计时、查看剩余时间或停止响铃。'],
   alarms: ['闹钟', '管理响铃时间、重复方式和稍后提醒。'],
@@ -87,6 +87,7 @@ function showAutomation(group) {
   }
   if (group === 'runs' && state.settings) handle(loadExternalTasks);
 }
+const voiceStageLabels = {configuration:'配置不完整', capture:'收音失败', cancelled:'语音已取消', local_task:'本地任务创建失败', confirmed_on_device:'已处理登录指令', conversation_ended:'对话已结束', alarm_stopped:'已停止响铃', asr:'识别失败', model:'模型回复失败', playback:'播报失败', completed:'已处理'};
 function when(iso, timeZone = state.settings?.timezone) {
   return new Date(iso).toLocaleString('zh-CN', {timeZone,month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
 }
@@ -187,7 +188,12 @@ function renderAbilities() {
   const tools = (networkConfig?.tools || []).filter(tool=>tool.kind==='http').map(tool=>
     capabilityRow(tool.name,tool.description,el('span',toolChannels(tool),'badge info'),
       [button('配置',()=>openHTTP(tool),'secondary'),button('移除',()=>removeNetworkTool(tool),'secondary')]));
-  renderCapabilityTable('ability-list',[roomRow,...clockRows,practiceRow,haRow,...custom.map(savedAbilityRow),...tools],'暂无能力。');
+  const example = capabilityRow('HTTP 测试工具', '发出示例 GET 请求并查看返回结果。',
+    el('span','手动试运行','badge info'), [button('打开', () => {
+      $('http-example-result').hidden = true;
+      $('http-example-dialog').showModal();
+    }, 'secondary')]);
+  renderCapabilityTable('ability-list',[roomRow,...clockRows,practiceRow,haRow,...custom.map(savedAbilityRow),example,...tools],'暂无能力。');
   renderCapabilityTable('flow-list',flows.map(savedAbilityRow),'还没有手动流程。');
   renderCapabilityMenus(custom);
   renderRoomAudioBadge();
@@ -827,7 +833,7 @@ function renderManagement() {
   $('voice-monitor').hidden = !voice?.available;
   if (voice?.available) {
     const last = voice.last_turn?.revision === config.revision ? voice.last_turn : null;
-    const stage = {configuration:'配置不完整', capture:'收音失败', cancelled:'语音已取消', local_task:'本地任务创建失败', confirmed_on_device:'已处理登录指令', conversation_ended:'对话已结束', alarm_stopped:'已停止响铃', asr:'识别失败', model:'模型回复失败', playback:'播报失败', completed:'已处理'};
+    const stage = voiceStageLabels;
     const current = voice.alarm_ringing ? '正在响铃' : voice.listening_followup ? '等待你继续说话' : voice.busy
       ? '正在处理语音' : voice.wake_detector_ready ? '待唤醒 · 说「' + config.wake_word + '」' : '唤醒检测未就绪';
     $('voice-state').textContent = current;
@@ -899,6 +905,11 @@ function updateDialogueOptions() {
   const languages = dialogueCatalog.voices[provider]?.[draftTTSVoice()] || dialogueCatalog.tts[provider] || ['zh'];
   const replies = $('reply-language');
   setLanguageOptions(replies, languages, replies.value);
+  const missing = dialogueCatalog.languages.filter(item => !languages.includes(item.id)).map(item => item.name);
+  const note = provider === 'system' ? '音箱系统语音当前仅开放普通话。切换到支持目标语言的语音合成服务和音色后即可选择。' :
+    missing.length ? '当前语音合成服务或音色不支持：'+missing.join('、')+'。更换支持目标语言的服务和音色后即可选择。' : '';
+  $('reply-language-note').textContent = savedSettings.mode === 'external' ?
+    '当前为仅外部 Agent 模式。默认回答语言适用于直连大模型和混合模式。 '+note : note;
   const preview = $('tts-preview-language');
   setLanguageOptions(preview, provider === 'system' ? ['zh','en','ja','ko'] : languages, preview.value, 'zh');
   updatePreviewNote();
@@ -1684,9 +1695,18 @@ rateForm.addEventListener('submit',event=>{
   },event.submitter);
 });
 
+let dialogueRange;
 async function loadDialogues() {
   const version=++dialogueRequest;
-  const query=new URLSearchParams({date:$('dialogue-date').value,offset:dialogueOffset});
+  if (!dialogueRange) {
+    const today = localTimeValue(new Date()).slice(0,10);
+    const first = new Date(today+'T00:00:00Z');
+    first.setUTCDate(first.getUTCDate()-6);
+    dialogueRange = {from:first.toISOString().slice(0,10),to:today};
+    $('dialogue-from').value = dialogueRange.from;
+    $('dialogue-to').value = dialogueRange.to;
+  }
+  const query=new URLSearchParams({...dialogueRange,offset:dialogueOffset});
   const data=await api('/api/dialogues?'+query);
   if (version!==dialogueRequest) return;
   if (dialogueOffset&&data.count<=dialogueOffset) {
@@ -1696,7 +1716,7 @@ async function loadDialogues() {
   $('dialogue-enabled').checked=data.enabled;
   const short = text => text ? (Array.from(text).length>58?Array.from(text).slice(0,58).join('')+'…':text) : '—';
   const rows = data.items.map(item=>{
-    const stage=item.timing.stage==='completed'?'已完成':item.timing.stage||'未知';
+    const stage = item.timing.stage==='completed' ? '已完成' : voiceStageLabels[item.timing.stage] || '未知';
     const show=button('查看',()=>{
       const duration=el('p',`识别 ${item.timing.asr_ms||0} ms · 模型 ${item.timing.model_ms||0} ms · 播报 ${item.timing.playback_ms||0} ms`,'muted');
       const remove=button('删除记录',async()=>{
@@ -1709,13 +1729,22 @@ async function loadDialogues() {
         el('h3','用户'),el('p',item.transcript||'未取得识别文本。'),el('h3','喜悦 Voice'),el('p',item.reply||'—'),duration,remove);
       $('dialogue-detail').showModal();
     },'secondary');
-    return [when(item.at),short(item.transcript),short(item.reply),stage,[show]];
+    return [when(item.at),short(item.transcript),short(item.reply),el('span',stage,item.timing.stage==='completed'?'badge':'badge paused'),[show]];
   });
   tableContent('dialogue-list',['时间','用户说','喜悦回复','结果','详情'],rows,
-    data.enabled?'暂无对话记录。':'对话记录已关闭，可在系统配置开启。');
+    data.enabled?'所选日期范围内没有对话记录。':'对话记录已关闭，可在系统配置开启。','dialogue-table');
   pageControls('dialogue',dialogueOffset,data.count);
 }
-$('dialogue-date').addEventListener('change',()=>{dialogueOffset=0;handle(loadDialogues);});
+$('dialogue-range').addEventListener('submit',event=>{
+  event.preventDefault();
+  const error = event.currentTarget.querySelector('.form-error');
+  const from = $('dialogue-from').value, to = $('dialogue-to').value;
+  error.textContent = from > to ? '开始日期须早于或等于结束日期。' : '';
+  if (error.textContent) return;
+  dialogueRange = {from,to};
+  dialogueOffset = 0;
+  handle(loadDialogues,event.submitter);
+});
 $('dialogue-prev').addEventListener('click',()=>{dialogueOffset=Math.max(0,dialogueOffset-activityPageSize);handle(loadDialogues);});
 $('dialogue-next').addEventListener('click',()=>{dialogueOffset+=activityPageSize;handle(loadDialogues);});
 $('dialogue-enabled').addEventListener('change',event=>handle(async()=>{
@@ -1836,6 +1865,16 @@ function showPractice(config) {
   const updateButton=()=>{submit.disabled=!config.available.length && (enabled.checked || !config.enabled);};
   enabled.onchange=updateButton;
   updateButton();
+  const limits = (config.languages || []).filter(item=>!config.available.some(choice=>choice.id===item.id));
+  $('practice-language-limits').replaceChildren(...limits.map(item=>{
+    const reasons = [];
+    if (!config.asr_ready) reasons.push('语音识别未配置');
+    else if (!config.asr_languages?.includes(item.id)) reasons.push('当前语音识别不支持');
+    if (!config.tts_ready) reasons.push('语音合成未配置');
+    else if (!config.tts_languages?.includes(item.id)) reasons.push('当前语音合成服务或音色不支持');
+    if (config.external_only) reasons.push('仅外部 Agent 模式');
+    return el('li',item.name+'不可选 · '+reasons.join('、'));
+  }));
   const setupLink=$('practice-voice-link');
   setupLink.hidden = Boolean(config.available.length);
   setupLink.href = config.external_only ? '#settings/model' : '#settings/voice';
@@ -1992,44 +2031,14 @@ async function openHTTP(tool) {
   (tool?.parameters || []).forEach(appendHTTPParameter);
   $('http-dialog').showModal();
 }
-const weatherForm=$('weather-form');
-const weatherCities = {
-  shanghai:[31.23,121.47], beijing:[39.90,116.40], guangzhou:[23.13,113.26],
-  shenzhen:[22.54,114.06], hangzhou:[30.27,120.16], chengdu:[30.57,104.07]
-};
-function weatherPayload() {
-  const selected=weatherForm.elements.city;
-  const city=selected.selectedOptions[0].textContent;
-  const [latitude,longitude]=weatherCities[selected.value];
-  const query=new URLSearchParams({latitude,longitude,current:'temperature_2m'});
-  return {kind:'http',method:'GET',endpoint:'https://api.open-meteo.com/v1/forecast?'+query,
-    name:city+'当前气温',description:'查询'+city+'现在的气温，数据来自 Open-Meteo。',
-    extract:'current.temperature_2m',unit:'°C',voice:weatherForm.elements.voice.checked};
-}
-$('http-open').onclick=()=>{
-  weatherForm.reset();
-  $('weather-result').textContent='';
-  $('add-tool-dialog').showModal();
-};
-$('http-blank').onclick=event=>handle(async()=>{
-  $('add-tool-dialog').close();
-  await openHTTP();
+$('http-open').onclick = event => handle(() => openHTTP(),event.currentTarget);
+$('http-example-test').onclick = event => networkAction($('http-example-result'),event.currentTarget, async () => {
+  return JSON.stringify(await api(networkRoot+'/example'),null,2);
+});
+$('http-example-copy').onclick = event => handle(async ()=>{
+  await openHTTP({method:'GET',extract:'message'});
+  $('http-example-dialog').close();
 },event.currentTarget);
-weatherForm.elements.city.onchange=()=>{$('weather-result').textContent='';};
-$('weather-test').onclick=event=>networkAction($('weather-result'),event.currentTarget,async()=>{
-  const {result}=await api(networkRoot+'/test','POST',weatherPayload());
-  return result;
-});
-weatherForm.addEventListener('submit',event=>{
-  event.preventDefault();
-  networkAction($('weather-result'),weatherForm.querySelector('[type=submit]'),async()=>{
-    await api(networkRoot,'POST',weatherPayload());
-    await loadNetworkConfig();
-    $('add-tool-dialog').close();
-    toast('气温工具已添加');
-    return '';
-  });
-});
 
 function httpPayload() {
   const form = httpForm.elements;

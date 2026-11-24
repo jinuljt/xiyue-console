@@ -170,7 +170,9 @@
       </section>
       <section class="settings-panel" id="dialogue-settings">
         <div class="panel-heading"><h2>对话语言</h2><p>可选语言随语音合成服务和音色而变化。你也可以说「这题用英文回答」。</p></div>
-        <label>默认回答语言<select id="reply-language" required></select></label>
+        <label>默认回答语言<select id="reply-language" required aria-describedby="reply-language-note"></select></label>
+        <p id="reply-language-note" class="muted"></p>
+        <a href="/help.html#dialogue-languages">查看语言配置指南</a>
       </section>
       <div class="settings-toolbar"><span class="settings-save-state muted" role="status"></span><button type="submit" class="primary" disabled>保存语音设置</button></div>
       <p class="form-error" role="alert"></p>
@@ -210,6 +212,7 @@
     <section class="settings-panel" id="privacy-settings">
       <h2>隐私与记录</h2><label class="check-label"><input id="dialogue-enabled" type="checkbox">保存对话文字</label>
       <small>开启后在音箱本机保存识别文字和回复，切换后立即生效。</small>
+      <div class="service-actions"><button type="button" id="dialogue-clear" class="secondary">清空记录</button></div>
     </section>
     </div>
     </div>
@@ -262,7 +265,12 @@
   </section>
   <section id="dialogues" class="page" hidden>
     <div class="section-heading"><p>保留最近 7 天，最多 2 MiB。</p><button class="secondary" type="button" data-go="settings/privacy">记录设置</button></div>
-    <div class="service-actions"><label>日期<input type="date" id="dialogue-date"></label><button type="button" id="dialogue-clear" class="secondary">清空记录</button></div>
+    <form id="dialogue-range" class="service-actions dialogue-filters">
+      <label>开始日期<input type="date" id="dialogue-from" required></label>
+      <label>结束日期<input type="date" id="dialogue-to" required></label>
+      <button type="submit" class="primary">查询</button>
+      <p class="form-error" role="alert"></p>
+    </form>
     <div id="dialogue-list"></div>
     <div class="service-actions"><button type="button" id="dialogue-prev" class="secondary">上一页</button><span id="dialogue-page"></span><button type="button" id="dialogue-next" class="secondary">下一页</button></div>
   </section>
@@ -335,21 +343,18 @@
     <label class="check-label"><input type="checkbox" name="enabled">启用外语陪练</label>
     <label>陪练语言<select name="language"></select></label>
     <p id="practice-note" class="muted"></p>
+    <ul id="practice-language-limits" class="muted"></ul>
+    <a href="/help.html#dialogue-languages">查看语言配置指南</a>
     <p id="practice-result" role="status"></p>
     <div class="actions"><a href="#settings/voice" id="practice-voice-link">配置语音服务</a><button type="submit" class="primary">保存陪练设置</button></div>
   </form>
 </dialog>
-<dialog id="add-tool-dialog" class="drawer" aria-labelledby="add-tool-title">
-  <div class="dialog-heading"><h2 id="add-tool-title">添加工具</h2><button type="button" data-close aria-label="关闭">×</button></div>
-  <form id="weather-form">
-    <h3>查当前气温</h3>
-    <p>添加后可以让喜悦查询所选城市的当前气温。<a href="https://open-meteo.com/en/docs">天气数据由 Open-Meteo 提供</a></p>
-    <label>城市<select name="city"><option value="shanghai">上海</option><option value="beijing">北京</option><option value="guangzhou">广州</option><option value="shenzhen">深圳</option><option value="hangzhou">杭州</option><option value="chengdu">成都</option></select></label>
-    <label class="check-label"><input type="checkbox" name="voice" checked>允许语音调用</label>
-    <p id="weather-result" role="status"></p>
-    <div class="actions"><button type="button" id="weather-test" class="secondary">试运行</button><button type="submit" class="primary">添加气温工具</button></div>
-  </form>
-  <button type="button" id="http-blank" class="secondary">从空白创建 HTTP 工具</button>
+<dialog id="http-example-dialog" class="drawer" aria-labelledby="http-example-title">
+  <div class="dialog-heading"><h2 id="http-example-title">HTTP 测试工具</h2><button type="button" data-close aria-label="关闭">×</button></div>
+  <p>向这台音箱发出 GET 请求，读取 JSON 中的 <code>message</code>。无需密钥。</p>
+  <p><code>GET /api/network-tools/example</code></p>
+  <pre id="http-example-result" role="status" hidden></pre>
+  <div class="actions"><button type="button" id="http-example-test" class="primary">试运行</button><button type="button" id="http-example-copy" class="secondary">以此为模板添加工具</button></div>
 </dialog>
 <dialog id="ha-dialog" class="drawer" aria-labelledby="ha-title">
   <div class="dialog-heading"><h2 id="ha-title">Home Assistant</h2><button type="button" data-close aria-label="关闭">×</button></div>
