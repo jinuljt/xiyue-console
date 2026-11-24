@@ -251,13 +251,6 @@ dialog.drawer .field-grid { grid-template-columns: 1fr; }
 .clock-form input[type="number"] { width: 66px; }
 /* Automation editor */
 .rule-list-actions { margin-top: 0; }
-.rule-examples { position: relative; }
-.rule-examples > summary { display: flex; align-items: center; min-height: 32px; padding: 5px 11px; border: 1px solid var(--control); border-radius: var(--radius); cursor: pointer; }
-.rule-examples > summary::after { content: "▾"; margin-inline-start: 7px; }
-.rule-example-options { position: absolute; z-index: 2; inset-block-start: calc(100% + 5px); inset-inline-end: 0; width: max-content; min-width: 196px; padding: 5px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 20px #18243619; }
-.rule-example-options button { display: grid; width: 100%; text-align: start; }
-.rule-example-options button:hover { background: var(--pale); }
-.rule-example-options small { color: var(--muted); }
 .rule-editor-name :is(h2,label) { margin-top: 8px; }
 .rule-editor-name label { max-width: 440px; margin-bottom: 0; }
 .rule-editor-layout { display: grid; grid-template-columns: minmax(245px,.8fr) minmax(0,1.2fr); align-items: start; gap: 16px; }
@@ -281,7 +274,6 @@ dialog.drawer .field-grid { grid-template-columns: 1fr; }
   .rule-detail { display: none; }
   .rule-outline .rule-part-panel { padding: 12px 10px 10px; border: 1px solid var(--line); border-top: 0; }
 }
-@media (max-width: 430px) { .rule-example-options { inset-inline: 0 auto; } }
 .automation-preview-list { padding-inline-start: 24px; }
 .automation-preview-list li + li { margin-top: 8px; }
 

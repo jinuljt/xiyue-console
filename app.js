@@ -811,16 +811,16 @@ function showRuleFields() {
     }
   }
 }
-async function openRule(rule, draft, toolNames = {}, example = false) {
+async function openRule(rule, draft, toolNames = {}) {
   await Promise.all([loadNetworkConfig(),loadRoomAudio().catch(()=>{})]);
   selectRulePart(null);
   ruleForm.reset();
   const fields=ruleForm.elements;
   editingRule=rule?.id||'';
-  $('rule-title').textContent=rule?'编辑自动化':example?'编辑示例':draft?'编辑导入的流程':'新建自动化';
+  $('rule-title').textContent=rule?'编辑自动化':draft?'编辑导入的流程':'新建自动化';
   const note=$('rule-import-note');
   note.hidden=!draft;
-  note.textContent=example?'可以修改示例里的文字、时长和触发方式，准备好后再保存。':'检查流程后保存。导入文件不会立即启动流程。';
+  note.textContent='检查流程后保存。导入文件不会立即启动流程。';
   const next=new Date(rule?.schedule.next_at||0);
   fields.local_time.value=next.getTime()>Date.now()?localTimeValue(next):futureLocalTime();
   const authorized=(networkConfig?.tools||[]).filter(tool=>tool.automation);
@@ -865,7 +865,7 @@ async function openRule(rule, draft, toolNames = {}, example = false) {
       if (step.next && next) next.value=rows[step.next-1]?.dataset.stepKey || '';
     });
   } else appendRuleAction();
-  selectRulePart(example?ruleStepParts.get($('rule-actions').firstElementChild):triggerPart);
+  selectRulePart(triggerPart);
   ruleEditorOpen=true;
   ruleEditorDirty=false;
   location.hash='automation/edit';
@@ -1109,27 +1109,6 @@ $('config-run').addEventListener('click', () => {
 $('config-form').addEventListener('input', () => {$('config-run').disabled = true;});
 $('new-task').addEventListener('click', () => openTask());
 $('new-schedule').addEventListener('click', event => handle(() => openRule(),event.currentTarget));
-const ruleExamples = {
-  break: {name:'休息 1 分钟',trigger:'manual',actions:[
-    {action:'speak',value:'起来活动一下。'},
-    {action:'wait',seconds:60},
-    {action:'speak',value:'休息结束。'}
-  ]},
-  pomodoro: {name:'番茄工作法',trigger:'manual',actions:[
-    {action:'speak',value:'开始专注。'},
-    {action:'wait',seconds:25*60},
-    {action:'speak',value:'专注结束，休息一下。'},
-    {action:'wait',seconds:5*60},
-    {action:'speak',value:'休息结束，这一轮番茄钟完成。'}
-  ]}
-};
-for (const control of document.querySelectorAll('[data-rule-example]')) {
-  control.addEventListener('click',()=>handle(async()=>{
-    $('rule-examples').open=false;
-    await openRule(null,structuredClone(ruleExamples[control.dataset.ruleExample]),{},true);
-  },control));
-}
-
 function exportWorkflow(rule) {
   const trigger=rule.trigger||'schedule';
   const workflow={name:rule.name,trigger,condition:rule.condition||'',after:rule.after||'',before:rule.before||'',actions:rule.actions};
