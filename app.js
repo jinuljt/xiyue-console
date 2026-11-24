@@ -5,7 +5,10 @@ let editingAbility = null;
 let refreshActive;
 let lastSnapshot = '';
 let providerOptions = null;
-let settingsDirty = false;
+const settingsDirty = new Set();
+const settingsEditCount = {};
+const settingsScopes = ['device','voice','model','search','privacy'];
+let settingsSaving = false;
 let settingsRevision = 0;
 let savedSettings;
 let serverStatus = null;
@@ -37,9 +40,10 @@ async function api(path, method = 'GET', body) {
 }
 async function handle(fn, b) {if (b) b.disabled = true; try {await fn();} catch (e) {toast(e.message);} finally {if (b) b.disabled = false;}}
 function page(name) {
-  const privacy = name === 'settings/privacy';
-  const dialogue = name === 'settings/dialogue';
-  if (privacy || dialogue) name = 'system';
+  let settingsTab = name.startsWith('settings/') ? name.slice(9) : 'device';
+  if (settingsTab === 'dialogue') settingsTab = 'voice';
+  if (!settingsScopes.includes(settingsTab)) settingsTab = 'device';
+  if (name.startsWith('settings/')) name = 'system';
   if (name === 'schedules') {
     name = 'automation';
     showAutomation('rules');
@@ -59,8 +63,13 @@ function page(name) {
   if (target === 'abilities' && state.settings) handle(loadRoomAudio);
   if (target === 'alarms' && state.settings) initializeAlarmTime();
   if (target === 'capability') renderCustomCapability(custom);
-  if (privacy) $('privacy-settings').scrollIntoView({block:'start'});
-  if (dialogue) $('dialogue-settings').scrollIntoView({block:'start'});
+  if (target === 'system') {
+    for (const panel of document.querySelectorAll('[data-settings-scope]')) panel.hidden = panel.dataset.settingsScope !== settingsTab;
+    for (const link of document.querySelectorAll('[data-settings-tab]')) {
+      if (link.dataset.settingsTab === settingsTab) link.setAttribute('aria-current','page');
+      else link.removeAttribute('aria-current');
+    }
+  }
   $('new-task').hidden = target !== 'tasks';
 }
 function showAutomation(group) {
@@ -161,9 +170,17 @@ function renderAbilities() {
     return capabilityRow(name,description,el('span',enabled?'已启用':'未启用',enabled?'badge':'badge paused'),actions);
   });
   const practice = state.settings?.practice_enabled;
-  const practiceRow = capabilityRow('外语陪练', '和喜悦练英语口语，例如模拟点咖啡。', el('span', practice?'已启用':'未启用',practice?'badge':'badge paused'),
-    [button('配置', () => {location.hash='settings/dialogue';}, 'secondary')]);
-  $('ability-list').replaceChildren(roomRow, ...clockRows, practiceRow, ...custom.map(savedAbilityRow));
+  const practiceStatus = practice ? (savedPracticeAvailable(state.settings) ? '已启用' : '待配置') : '未启用';
+  const practiceRow = capabilityRow('外语陪练', '用选定语言练习口语和情景对话。', el('span', practiceStatus,practiceStatus==='已启用'?'badge':'badge paused'),
+    [button('配置', openPractice, 'secondary')]);
+  const haConnected = networkConfig?.home_assistant && networkConfig?.ha_key;
+  const haRow = capabilityRow('Home Assistant', '读取已选择的设备状态，将灯和开关接入自动化。',
+    el('span', !networkConfig ? '读取中' : haConnected ? '已配置' : '未连接',haConnected?'badge':'badge paused'),
+    [button('配置', () => openHA(), 'secondary')]);
+  const tools = (networkConfig?.tools || []).filter(tool=>tool.kind==='http').map(tool=>
+    capabilityRow(tool.name,tool.description,el('span',toolChannels(tool),'badge'),
+      [button('配置',()=>openHTTP(tool),'secondary'),button('移除',()=>removeNetworkTool(tool),'secondary')]));
+  $('ability-list').replaceChildren(roomRow, ...clockRows, practiceRow, haRow, ...custom.map(savedAbilityRow), ...tools);
   $('flow-list').replaceChildren(...(flows.length ? flows.map(savedAbilityRow) : [empty('还没有手动流程。')]));
   renderCapabilityMenus(custom);
   renderRoomAudioBadge();
@@ -209,7 +226,7 @@ function renderRoomAudioBadge(unavailable = false) {
   $('stat-abilities').textContent = Object.values(state.abilities)
     .filter(a => a.manifest.menu && a.enabled).length +
     Object.keys(clockCapabilities).filter(id=>state.features?.[id]!==false).length +
-    Number(Boolean(roomAudio?.available && roomAudio.config.source)) + Number(Boolean(state.settings?.practice_enabled));
+    Number(Boolean(roomAudio?.available && roomAudio.config.source)) + Number(Boolean(state.settings?.practice_enabled && savedPracticeAvailable(state.settings)));
 }
 async function openRoomAudio() {
   $('room-audio-dialog').showModal();
@@ -790,7 +807,7 @@ function renderManagement() {
   $('setup-next').textContent = instructions[step] || '';
   $('setup-action').hidden = step === 'verify_device';
   $('setup-action').textContent = {verify:'验证服务',configure_asr:'配置语音识别',configure_tts:'配置语音合成',configure:'配置大模型'}[step] || '';
-  if (!settingsDirty && settingsRevision !== config.revision) fillSettings(config);
+  if (!settingsSaving && settingsDirty.size === 0 && settingsRevision !== config.revision) fillSettings(config);
   if (location.hash === '#usage' && usageRequest === 0) refreshActivityPage();
 }
 function inputLabel(title,input) {const label=el('label',title);label.append(input);return label;}
@@ -840,26 +857,11 @@ function updateDialogueOptions() {
   if (!dialogueCatalog || !savedSettings) return;
   const provider = $('tts-provider').value;
   const languages = dialogueCatalog.voices[provider]?.[draftTTSVoice()] || dialogueCatalog.tts[provider] || ['zh'];
-  const mode = $('setting-mode').value;
   const replies = $('reply-language');
-  setLanguageOptions(replies, mode === 'external' ? ['zh'] : languages, replies.value, '');
-  replies.disabled = mode === 'external';
-  if (replies.disabled) replies.value = 'zh';
+  setLanguageOptions(replies, languages, replies.value);
   const preview = $('tts-preview-language');
   setLanguageOptions(preview, provider === 'system' ? ['zh','en','ja','ko'] : languages, preview.value, 'zh');
   updatePreviewNote();
-
-  const asr = $('asr-provider').value;
-  const asrReady = asr === 'sensevoice' ? Boolean($('asr-endpoint').value.trim())
-    : Boolean($('asr-key').value || (asr === savedSettings.asr.provider && savedSettings.asr.key_configured && !$('asr-clear').checked));
-  const ttsKey = $('tts-key').value || (provider === savedSettings.tts.provider && savedSettings.tts.key_configured && !$('tts-clear').checked);
-  const practice = $('practice-enabled');
-  const supported = languages.includes('en') && dialogueCatalog.asr[asr]?.includes('en') && mode !== 'external';
-  practice.disabled = !(supported && asrReady && ttsKey);
-  if (practice.disabled) practice.checked = false;
-  $('practice-note').textContent = practice.disabled
-    ? '需要可用的英语识别和播报，以及直连大模型或混合模式。自建 SenseVoice 需启用自动语种识别。'
-    : '说「陪我练英语，模拟点咖啡」开始。想回到日常对话时，说「退出陪练」。';
 }
 function updatePreviewNote() {
   const experiment = $('tts-provider').value === 'system' && $('tts-preview-language').value !== 'zh';
@@ -867,7 +869,7 @@ function updatePreviewNote() {
 }
 $('tts-provider').addEventListener('change', updateTTSFields);
 $('tts-preview-language').addEventListener('change', updatePreviewNote);
-for (const id of ['tts-voice','tts-deepseek-voice','tts-key','tts-clear','asr-provider','asr-endpoint','asr-key','asr-clear','setting-mode']) {
+for (const id of ['tts-voice','tts-deepseek-voice']) {
   $(id).addEventListener('input', updateDialogueOptions);
   $(id).addEventListener('change', updateDialogueOptions);
 }
@@ -976,34 +978,37 @@ $('timezone-toggle').addEventListener('click', () => {
     showTimezoneList();
   }
 });
-function fillSettings(config) {
+function fillSettings(config, scope) {
   settingsRevision=config.revision;
   savedSettings=config;
-  $('device-asr-fields').hidden = false;
-  $('device-tts-fields').hidden = false;
-  $('tts-provider').value = ['doubao','deepseek'].includes(config.tts.provider) ? config.tts.provider : 'system';
-  previousTTSProvider = $('tts-provider').value;
-  $('tts-deepseek-voice').value = config.tts.model === 'tide' ? 'tide' : 'stella';
-  $('tts-voice').value = config.tts.provider === 'doubao' ? config.tts.model : '';
-  $('tts-key').value = '';
-  $('tts-clear').checked = false;
-  $('tts-key-configured').textContent = config.tts.key_configured ? '已保存，留空则保留。' : '';
-  $('asr-provider').value = config.asr.provider === 'sensevoice' ? 'sensevoice' : 'doubao';
-  $('asr-endpoint').value = config.asr.provider === 'sensevoice' ? config.asr.endpoint : '';
-  updateASRFields();
-  $('asr-key').value = '';
-  $('asr-clear').checked = false;
-  $('asr-clear-label').hidden = !config.asr.key_configured;
-  $('asr-key-configured').textContent = config.asr.key_configured ? '已保存凭证，留空则保留。' : '';
-  $('setting-wake').value = config.wake_word;
-  chosenTimezone = config.timezone;
-  closeTimezoneList();
+  if (!scope || scope === 'voice') {
+    $('device-asr-fields').hidden = false;
+    $('device-tts-fields').hidden = false;
+    $('tts-provider').value = ['doubao','deepseek'].includes(config.tts.provider) ? config.tts.provider : 'system';
+    previousTTSProvider = $('tts-provider').value;
+    $('tts-deepseek-voice').value = config.tts.model === 'tide' ? 'tide' : 'stella';
+    $('tts-voice').value = config.tts.provider === 'doubao' ? config.tts.model : '';
+    $('tts-key').value = '';
+    $('tts-clear').checked = false;
+    $('tts-key-configured').textContent = config.tts.key_configured ? '已保存，留空则保留。' : '';
+    $('asr-provider').value = config.asr.provider === 'sensevoice' ? 'sensevoice' : 'doubao';
+    $('asr-endpoint').value = config.asr.provider === 'sensevoice' ? config.asr.endpoint : '';
+    updateASRFields();
+    $('asr-key').value = '';
+    $('asr-clear').checked = false;
+    $('asr-clear-label').hidden = !config.asr.key_configured;
+    $('asr-key-configured').textContent = config.asr.key_configured ? '已保存凭证，留空则保留。' : '';
+    $('reply-language').replaceChildren(new Option('', config.reply_language || 'zh'));
+    updateTTSFields();
+  }
+  if (!scope || scope === 'device') {
+    $('setting-wake').value = config.wake_word;
+    chosenTimezone = config.timezone;
+    closeTimezoneList();
+  }
+  updateSettingsSaveBars();
+  if (scope && scope !== 'model') return;
   $('setting-mode').value = config.mode;
-  $('reply-language').replaceChildren(new Option('', config.reply_language || 'zh'));
-  $('practice-enabled').checked = Boolean(config.practice_enabled);
-  updateTTSFields();
-  $('save-settings').hidden=!settingsDirty;
-  $('settings-save-state').textContent=config.updated_at ? `已保存 · ${when(config.updated_at)}` : '默认配置尚未保存';
   if (config.mode !== 'direct') $('advanced-settings').open = true;
   for (const name of ['llm', 'external']) {
     const current = config[name];
@@ -1115,12 +1120,9 @@ function updateModeActions() {
 $('setting-mode').addEventListener('change', updateModeActions);
 $('setup-action').addEventListener('click', () => {
   const step = setupStep(state.settings);
-  if (step === 'verify') location.hash = 'system';
-  else {
-    location.hash = 'system';
-    if (step === 'configure_asr') setTimeout(() => $('asr-provider').focus(), 0);
-    if (step === 'configure_tts') setTimeout(() => $('tts-provider').focus(), 0);
-  }
+  const voice = step === 'configure_asr' || step === 'configure_tts';
+  location.hash = voice ? 'settings/voice' : 'settings/model';
+  if (voice) setTimeout(() => $(step === 'configure_asr'?'asr-provider':'tts-provider').focus(), 0);
 });
 function serviceFormValues(name) {
   if (name === 'asr') {
@@ -1157,17 +1159,51 @@ for (const service of ['asr', 'tts']) {
   const control = $(`${service}-verify`);
   control.addEventListener('click', () => handle(() => verifySettings(service, $(`${service}-verify-result`)), control));
 }
-$('settings-form').addEventListener('input',event=>{if(event.target === timezoneInput || event.target.id === 'tts-preview-language')return;settingsDirty=true;$('save-settings').hidden=false;$('settings-save-state').textContent='有未保存的修改';});
-$('settings-form').addEventListener('change',event=>{if(event.target.id === 'tts-preview-language')return;settingsDirty=true;$('save-settings').hidden=false;$('settings-save-state').textContent='有未保存的修改';});
-$('settings-form').addEventListener('submit',async event=>{
-  event.preventDefault();const b=event.currentTarget.querySelector('[type=submit]');b.disabled=true;$('settings-error').textContent='';
-  try{
-    const payload={revision:settingsRevision,name:savedSettings.name,wake_word:$('setting-wake').value,timezone:chosenTimezone,mode:$('setting-mode').value,reply_language:$('reply-language').value,practice_enabled:$('practice-enabled').checked};
-    for (const name of ['asr', 'tts']) payload[name] = serviceFormValues(name);
-    for (const name of ['llm', 'external']) payload[name] = serviceFormValues(name);
-    const config=await api('/api/settings','PUT',payload);settingsDirty=false;fillSettings(config);await refresh();toast('配置已保存');
-  }catch(e){$('settings-error').textContent=e.message;}finally{b.disabled=false;}
-});
+function updateSettingsSaveBars() {
+  for (const scope of ['device','voice','model']) {
+    const form = $(`settings-${scope}-form`);
+    const dirty = settingsDirty.has(scope);
+    form.querySelector('[type=submit]').disabled = settingsSaving || !dirty;
+    form.querySelector('.settings-save-state').textContent = dirty ? '此页有未保存的修改' : '';
+  }
+}
+for (const scope of ['device','voice','model']) {
+  const form = $(`settings-${scope}-form`);
+  function markDirty(event) {
+    if ((event.target === timezoneInput && event.type==='input') || event.target.id==='tts-preview-language') return;
+    settingsDirty.add(scope);
+    settingsEditCount[scope]=(settingsEditCount[scope]||0)+1;
+    updateSettingsSaveBars();
+  }
+  form.addEventListener('input',markDirty);
+  form.addEventListener('change',markDirty);
+  form.addEventListener('submit',async event=>{
+    event.preventDefault();
+    if (settingsSaving || !settingsDirty.has(scope)) return;
+    const error=form.querySelector('.form-error');
+    error.textContent='';
+    const submittedEdits=settingsEditCount[scope];
+    settingsSaving=true;
+    updateSettingsSaveBars();
+    try {
+      const payload={scope,revision:settingsRevision};
+      if (scope==='device') Object.assign(payload,{wake_word:$('setting-wake').value,timezone:chosenTimezone});
+      if (scope==='voice') Object.assign(payload,{asr:serviceFormValues('asr'),tts:serviceFormValues('tts'),reply_language:$('reply-language').value});
+      if (scope==='model') Object.assign(payload,{mode:$('setting-mode').value,llm:serviceFormValues('llm'),external:serviceFormValues('external')});
+      const config=await api('/api/settings','PUT',payload);
+      if (settingsEditCount[scope]===submittedEdits) {
+        settingsDirty.delete(scope);
+        fillSettings(config,scope);
+      } else {
+        savedSettings=config;
+        settingsRevision=config.revision;
+      }
+      await refresh();
+      toast('此页配置已保存');
+    } catch(e) {error.textContent=e.message;}
+    finally {settingsSaving=false;updateSettingsSaveBars();}
+  });
+}
 let externalTaskRevision;
 let selectedExternalTask;
 let externalRequestID;
@@ -1667,7 +1703,8 @@ async function loadNetworkConfig() {
     updateSearchKey();
   }
   $('search-key-status').textContent = config.search_key ? '已保存，留空保留。' : '';
-  renderNetworkTools();
+  renderAbilities();
+  renderHATools();
 }
 
 function searchPayload() {
@@ -1700,37 +1737,78 @@ async function networkAction(result, trigger, action) {
   finally { trigger.disabled = false; }
 }
 
-function renderNetworkTools() {
-  const target = $('network-tool-list');
-  const list = networkConfig.tools || [];
-  if (!list.length) {
-    target.replaceChildren(empty('尚未添加实体工具或自定义 HTTP 工具。'));
-    return;
-  }
-  const table = el('table');
-  table.setAttribute('aria-label', '已保存的工具');
-  const header = table.createTHead().insertRow();
-  for (const title of ['工具','来源','可用入口','操作']) header.append(el('th', title));
-  const body = table.createTBody();
-  for (const tool of list) {
-    const row = body.insertRow();
-    row.insertCell().textContent = tool.name;
-    row.insertCell().textContent = tool.kind === 'ha' ? 'Home Assistant' : '自定义 HTTP';
-    row.insertCell().textContent = [tool.voice && '语音', tool.automation && '自动化'].filter(Boolean).join('、') || '手动试运行';
-    const controls = el('div', undefined, 'table-actions');
-    controls.append(button('配置', () => tool.kind === 'ha' ? openHA(tool) : openHTTP(tool), 'secondary'),
-      button('移除', async () => {
-        if (!confirm('移除工具「'+tool.name+'」？')) return;
-        await api(networkRoot + '/' + tool.id, 'DELETE');
-        await loadNetworkConfig();
-      }, 'secondary'));
-    row.insertCell().append(controls);
-  }
-  const scroll = el('div', undefined, 'desktop-table');
-  scroll.append(table);
-  target.replaceChildren(scroll);
+function toolChannels(tool) {
+  return [tool.voice && '语音', tool.automation && '自动化'].filter(Boolean).join('、') || '手动';
 }
-
+async function removeNetworkTool(tool) {
+  if (!confirm('移除工具「'+tool.name+'」？')) return;
+  await api(networkRoot + '/' + tool.id, 'DELETE');
+  await loadNetworkConfig();
+}
+function renderHATools() {
+  const tools = (networkConfig?.tools || []).filter(tool=>tool.kind==='ha');
+  $('ha-tool-list').replaceChildren(...tools.map(tool=>capabilityRow(tool.name, tool.entity,
+    el('span',toolChannels(tool),'badge'), [
+      button('编辑',async () => {
+        editingNetworkTool=tool.id;
+        await loadHAEntities(tool);
+      },'secondary'),
+      button('移除',()=>removeNetworkTool(tool),'secondary')
+    ])));
+}
+function savedPracticeAvailable(settings) {
+  if (!settings || !dialogueCatalog) return false;
+  const language = settings.practice_language || 'en';
+  const tts = dialogueCatalog.voices[settings.tts.provider]?.[settings.tts.model] || dialogueCatalog.tts[settings.tts.provider] || [];
+  const asrReady = settings.asr.provider==='sensevoice' ? Boolean(settings.asr.endpoint) : settings.asr.key_configured;
+  return settings.mode!=='external' && asrReady && settings.tts.key_configured &&
+    dialogueCatalog.practice.includes(language) && tts.includes(language) && dialogueCatalog.asr[settings.asr.provider]?.includes(language);
+}
+const practicePath='/api/abilities/language-practice';
+const practiceForm=$('practice-form');
+async function openPractice() {
+  showPractice(await api(practicePath));
+  $('practice-result').textContent='';
+  $('practice-dialog').showModal();
+}
+function showPractice(config) {
+  const {enabled,language} = practiceForm.elements;
+  language.replaceChildren(...config.available.map(item=>new Option(item.name,item.id)));
+  if (config.available.some(item=>item.id===config.language)) language.value=config.language;
+  if (!config.available.length) language.append(new Option('暂无可用语言',''));
+  language.disabled = !config.available.length;
+  enabled.checked = config.enabled;
+  enabled.disabled = !config.available.length && !config.enabled;
+  const submit = practiceForm.querySelector('[type=submit]');
+  const updateButton=()=>{submit.disabled=!config.available.length && (enabled.checked || !config.enabled);};
+  enabled.onchange=updateButton;
+  updateButton();
+  const setupLink=$('practice-voice-link');
+  setupLink.hidden = Boolean(config.available.length);
+  setupLink.href = config.external_only ? '#settings/model' : '#settings/voice';
+  setupLink.textContent = config.external_only ? '配置模型与助手' : '配置语音服务';
+  $('practice-note').textContent = config.external_only ? '请选择直连大模型或混合模式。' :
+    !config.asr_ready ? '请先配置语音识别。' :
+    !config.tts_ready ? '请先配置语音合成。' :
+    !config.available.length ? '当前识别服务和合成音色没有共同支持的陪练语言。' :
+    '此列表只显示当前识别和播报都支持的陪练语言。';
+}
+$('practice-voice-link').onclick=()=>$('practice-dialog').close();
+practiceForm.addEventListener('submit',async event=>{
+  event.preventDefault();
+  const {enabled,language}=practiceForm.elements;
+  const submit=practiceForm.querySelector('[type=submit]');
+  submit.disabled=true;
+  try {
+    const previousRevision=settingsRevision;
+    const result=await api(practicePath,'PUT',{enabled:enabled.checked,language:language.value});
+    if (result.revision===previousRevision+1) settingsRevision=result.revision;
+    $('practice-dialog').close();
+    await refresh();
+    toast('陪练设置已保存');
+  } catch(error) {$('practice-result').textContent=error.message;}
+  finally {if (enabled.onchange) enabled.onchange();}
+});
 async function openHA(tool) {
   if (!networkConfig) await loadNetworkConfig();
   editingNetworkTool = tool?.id || '';
@@ -1740,6 +1818,7 @@ async function openHA(tool) {
   haConnection.elements.endpoint.value = networkConfig.home_assistant || '';
   $('ha-key-status').textContent = networkConfig.ha_key ? '已保存，留空保留。' : '';
   $('ha-connection-status').textContent = $('ha-tool-status').textContent = '';
+  renderHATools();
   $('ha-dialog').showModal();
   if (networkConfig.home_assistant) {
     await networkAction($('ha-connection-status'), $('ha-reload'), () => loadHAEntities(tool));
@@ -1776,7 +1855,6 @@ async function loadHAEntities(tool) {
   haForm.hidden = false;
   return ordered.length ? '已读取 '+ordered.length+' 个实体。' : '连接成功，未找到实体。';
 }
-$('ha-open').onclick = event => handle(() => openHA(), event.currentTarget);
 $('ha-reload').onclick = event => networkAction($('ha-connection-status'), event.currentTarget,
   () => loadHAEntities((networkConfig?.tools || []).find(tool => tool.id === editingNetworkTool)));
 haConnection.addEventListener('submit', event => {
@@ -1802,7 +1880,9 @@ haForm.addEventListener('submit', event => {
     const purposes = {state:'读取状态', turn_on:'开启设备', turn_off:'关闭设备'};
     await saveNetworkTool({kind:'ha', entity:entity.value, operation:operation.value, name:name.value,
       description:purposes[operation.value]+' '+name.value, voice:voice.checked, automation:automation.checked});
-    $('ha-dialog').close();
+    editingNetworkTool='';
+    haForm.reset();
+    updateHAOperation();
     toast('实体工具已保存');
     return '';
   });
@@ -1850,7 +1930,7 @@ async function openHTTP(tool) {
   const keySaved = networkConfig.tool_keys[editingNetworkTool];
   $('http-key-status').textContent = keySaved ? '已保存，留空保留。' : '';
   $('http-clear-label').hidden = !keySaved;
-  for (const key of ['name','description','method','endpoint','extract']) {
+  for (const key of ['name','description','method','endpoint','extract','unit']) {
     if (tool?.[key]) httpForm.elements[key].value = tool[key];
   }
   httpForm.elements.voice.checked = Boolean(tool?.voice);
@@ -1859,11 +1939,49 @@ async function openHTTP(tool) {
   (tool?.parameters || []).forEach(appendHTTPParameter);
   $('http-dialog').showModal();
 }
-$('http-open').onclick = event => handle(() => openHTTP(), event.currentTarget);
+const weatherForm=$('weather-form');
+const weatherCities = {
+  shanghai:[31.23,121.47], beijing:[39.90,116.40], guangzhou:[23.13,113.26],
+  shenzhen:[22.54,114.06], hangzhou:[30.27,120.16], chengdu:[30.57,104.07]
+};
+function weatherPayload() {
+  const selected=weatherForm.elements.city;
+  const city=selected.selectedOptions[0].textContent;
+  const [latitude,longitude]=weatherCities[selected.value];
+  const query=new URLSearchParams({latitude,longitude,current:'temperature_2m'});
+  return {kind:'http',method:'GET',endpoint:'https://api.open-meteo.com/v1/forecast?'+query,
+    name:city+'当前气温',description:'查询'+city+'现在的气温，数据来自 Open-Meteo。',
+    extract:'current.temperature_2m',unit:'°C',voice:weatherForm.elements.voice.checked};
+}
+$('http-open').onclick=()=>{
+  weatherForm.reset();
+  $('weather-result').textContent='';
+  $('add-tool-dialog').showModal();
+};
+$('http-blank').onclick=event=>handle(async()=>{
+  $('add-tool-dialog').close();
+  await openHTTP();
+},event.currentTarget);
+weatherForm.elements.city.onchange=()=>{$('weather-result').textContent='';};
+$('weather-test').onclick=event=>networkAction($('weather-result'),event.currentTarget,async()=>{
+  const {result}=await api(networkRoot+'/test','POST',weatherPayload());
+  return result;
+});
+weatherForm.addEventListener('submit',event=>{
+  event.preventDefault();
+  networkAction($('weather-result'),weatherForm.querySelector('[type=submit]'),async()=>{
+    await api(networkRoot,'POST',weatherPayload());
+    await loadNetworkConfig();
+    $('add-tool-dialog').close();
+    toast('气温工具已添加');
+    return '';
+  });
+});
+
 function httpPayload() {
   const form = httpForm.elements;
   const payload = {kind: 'http', voice:form.voice.checked, automation:form.automation.checked, clear_key:form.clear_key.checked};
-  for (const key of ['name','description','endpoint','method','extract','api_key']) payload[key] = form[key].value.trim();
+  for (const key of ['name','description','endpoint','method','extract','unit','api_key']) payload[key] = form[key].value.trim();
   payload.parameters = [...$('http-params').children].map(row => ({
     name: row.querySelector('[data-param-name]').value,
     type: row.querySelector('[data-param-type]').value

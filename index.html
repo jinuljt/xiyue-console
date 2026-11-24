@@ -36,12 +36,9 @@
     </section>
   </section>
   <section id="abilities" class="page" hidden>
+    <div class="section-heading capability-toolbar"><button id="http-open" class="primary" type="button">添加工具</button></div>
     <div id="ability-list" class="capability-list"></div>
-    <section class="settings-panel">
-      <div class="section-heading"><h2>连接与工具</h2></div>
-      <div class="actions"><button id="ha-open" class="secondary" type="button">Home Assistant</button><button id="http-open" class="secondary" type="button">添加自定义 HTTP 工具</button></div>
-      <div id="network-tool-list"></div>
-    </section>
+
   </section>
   <section id="tasks" class="page" hidden><div class="section-heading"><p>记录要做的事，完成后标记。</p></div><div id="task-list"></div>
   </section>
@@ -99,8 +96,16 @@
     </section>
   </section>
   <section id="system" class="page" hidden>
-    <form id="settings-form">
-      <div class="settings-toolbar"><span id="settings-save-state" class="muted">正在加载配置…</span><div><button type="submit" class="primary" id="save-settings" hidden>保存配置</button></div></div>
+    <nav class="settings-tabs automation-tabs" aria-label="系统配置分类">
+      <a data-settings-tab="device" href="#settings/device">设备</a>
+      <a data-settings-tab="voice" href="#settings/voice">语音与语言</a>
+      <a data-settings-tab="model" href="#settings/model">模型与助手</a>
+      <a data-settings-tab="search" href="#settings/search">网页搜索</a>
+      <a data-settings-tab="privacy" href="#settings/privacy">账号与隐私</a>
+    </nav>
+    <form data-settings-scope="device" id="settings-device-form" hidden>
+      <div class="settings-toolbar"><span class="settings-save-state muted" role="status"></span><button type="submit" class="primary" disabled>保存设备设置</button></div>
+      <p class="form-error" role="alert"></p>
       <section class="settings-panel"><div class="panel-heading"><h2>基本设置</h2><p>查看音箱型号，设置唤醒词和计划时区。</p></div><div class="field-grid"><div><span>音箱型号</span><p id="setting-device">型号待确认</p></div><label>唤醒词<input id="setting-wake" required maxlength="48"></label><div class="timezone-picker">
         <label for="setting-timezone">计划时区</label>
         <div class="timezone-control">
@@ -110,7 +115,10 @@
         <ul id="timezone-list" role="listbox" aria-label="时区选项" hidden></ul>
         <small>新建的定时计划按此时区运行。</small>
       </div></div></section>
-      <div id="model-settings"></div>
+    </form>
+    <form data-settings-scope="voice" id="settings-voice-form" hidden>
+      <div class="settings-toolbar"><span class="settings-save-state muted" role="status"></span><button type="submit" class="primary" disabled>保存语音设置</button></div>
+      <p class="form-error" role="alert"></p>
       <section class="settings-panel">
         <h2>语音识别 ASR</h2>
         <p id="asr-unavailable"></p>
@@ -150,9 +158,12 @@
       <section class="settings-panel" id="dialogue-settings">
         <div class="panel-heading"><h2>对话语言</h2><p>可选语言随语音合成服务和音色而变化。你也可以说「这题用英文回答」。</p></div>
         <label>默认回答语言<select id="reply-language" required></select></label>
-        <label class="check-label"><input type="checkbox" id="practice-enabled">启用英语口语陪练</label>
-        <p id="practice-note" class="muted"></p>
       </section>
+    </form>
+    <form data-settings-scope="model" id="settings-model-form" hidden>
+      <div class="settings-toolbar"><span class="settings-save-state muted" role="status"></span><button type="submit" class="primary" disabled>保存模型配置</button></div>
+      <p class="form-error" role="alert"></p>
+      <div id="model-settings"></div>
       <details id="advanced-settings" class="settings-panel">
         <summary>高级接入</summary>
         <h2>连接已有助手</h2>
@@ -167,9 +178,8 @@
         <p data-verify-mode="hybrid" hidden>普通问题由大模型回答。以「交给外部助手」开头的请求会交给连接器。</p>
         <div id="external-settings"></div>
       </details>
-      <p class="form-error" id="settings-error" role="alert"></p>
     </form>
-    <form id="search-form" class="settings-panel">
+    <form id="search-form" class="settings-panel" data-settings-scope="search" hidden>
       <div class="panel-heading"><h2>网页搜索</h2><p>查询近期信息或读取公开网页。使用 DeepSeek 独立搜索接口，适用于音箱的大模型直连模式及混合模式的本地对话。成功且有结果的调用按次计费。</p></div>
       <label class="check-label"><input name="enabled" type="checkbox">启用 DeepSeek 网页搜索</label>
       <label class="check-label"><input name="reuse" type="checkbox">使用已保存的官方 DeepSeek 大模型凭证</label>
@@ -177,14 +187,16 @@
       <div class="service-actions"><a href="/help.html#network-tools">查看配置指南</a><button id="search-test" type="button" class="secondary">验证</button><button class="primary" type="submit">保存搜索配置</button></div>
       <p id="search-result" role="status"></p>
     </form>
+    <div data-settings-scope="privacy" hidden>
     <section id="owner-management" class="settings-panel" hidden>
       <h2>管理员账号</h2>
       <button id="owner-change" type="button" class="secondary">修改密码</button>
     </section>
     <section class="settings-panel" id="privacy-settings">
       <h2>隐私与记录</h2><label class="check-label"><input id="dialogue-enabled" type="checkbox">保存对话文字</label>
-      <small>开启后在音箱本机保存识别文字和回复。</small>
+      <small>开启后在音箱本机保存识别文字和回复，切换后立即生效。</small>
     </section>
+    </div>
   </section>
   <section id="device-status" class="page" hidden>
     <section class="settings-panel" id="voice-monitor" hidden>
@@ -297,6 +309,29 @@
   <div class="dialog-heading"><h2 id="dialogue-detail-title">对话详情</h2><button type="button" data-close aria-label="关闭">×</button></div>
   <div id="dialogue-detail-body"></div>
 </dialog>
+<dialog id="practice-dialog" aria-labelledby="practice-title">
+  <form id="practice-form">
+    <div class="dialog-heading"><h2 id="practice-title">外语陪练</h2><button type="button" data-close aria-label="关闭">×</button></div>
+    <p>用选定语言模拟场景、练习表达。说「陪我练口语，模拟点咖啡」开始，说「退出陪练」结束。</p>
+    <label class="check-label"><input type="checkbox" name="enabled">启用外语陪练</label>
+    <label>陪练语言<select name="language"></select></label>
+    <p id="practice-note" class="muted"></p>
+    <p id="practice-result" role="status"></p>
+    <div class="actions"><a href="#settings/voice" id="practice-voice-link">配置语音服务</a><button type="submit" class="primary">保存陪练设置</button></div>
+  </form>
+</dialog>
+<dialog id="add-tool-dialog" aria-labelledby="add-tool-title">
+  <div class="dialog-heading"><h2 id="add-tool-title">添加工具</h2><button type="button" data-close aria-label="关闭">×</button></div>
+  <form id="weather-form">
+    <h3>查当前气温</h3>
+    <p>添加后可以让喜悦查询所选城市的当前气温。<a href="https://open-meteo.com/en/docs">天气数据由 Open-Meteo 提供</a></p>
+    <label>城市<select name="city"><option value="shanghai">上海</option><option value="beijing">北京</option><option value="guangzhou">广州</option><option value="shenzhen">深圳</option><option value="hangzhou">杭州</option><option value="chengdu">成都</option></select></label>
+    <label class="check-label"><input type="checkbox" name="voice" checked>允许语音调用</label>
+    <p id="weather-result" role="status"></p>
+    <div class="actions"><button type="button" id="weather-test" class="secondary">试运行</button><button type="submit" class="primary">添加气温工具</button></div>
+  </form>
+  <button type="button" id="http-blank" class="secondary">从空白创建 HTTP 工具</button>
+</dialog>
 <dialog id="ha-dialog" aria-labelledby="ha-title">
   <div class="dialog-heading"><h2 id="ha-title">Home Assistant</h2><button type="button" data-close aria-label="关闭">×</button></div>
   <p>在 Home Assistant 的个人资料页创建长期访问令牌。保存连接后，选择喜悦可以使用的实体。</p>
@@ -306,6 +341,7 @@
     <div class="actions"><button class="secondary" type="submit">保存连接</button><button id="ha-reload" class="secondary" type="button">读取实体</button></div>
     <p id="ha-connection-status" role="status"></p>
   </form>
+  <div id="ha-tool-list"></div>
   <form id="ha-tool-form" hidden>
     <label>实体<select name="entity" required></select></label>
     <label>操作<select name="operation"><option value="state">读取状态</option><option value="turn_on">开启</option><option value="turn_off">关闭</option></select></label>
@@ -324,6 +360,7 @@
     <div class="field-grid"><label>请求方法<select name="method"><option>GET</option><option>POST</option></select></label><label>固定请求地址<input name="endpoint" type="url" required placeholder="https://example.com/api/air"></label></div>
     <label>Bearer Token（可选）<input name="api_key" type="password" autocomplete="new-password"><small id="http-key-status"></small></label>
     <label class="check-label" id="http-clear-label" hidden><input name="clear_key" type="checkbox">清除已保存的凭证</label>
+    <label>返回值单位（可选）<input name="unit" maxlength="12" placeholder="例如 °C"></label>
     <label>返回字段（可选）<input name="extract" placeholder="例如 data.aqi"><small>填写 JSON 字段路径。留空时读取响应正文。</small></label>
     <fieldset><legend>调用参数</legend><div id="http-params"></div><button id="http-add-param" type="button" class="secondary">添加参数</button></fieldset>
     <label class="check-label"><input name="voice" type="checkbox">允许语音调用（GET）</label>

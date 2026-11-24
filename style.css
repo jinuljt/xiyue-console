@@ -135,3 +135,14 @@
 .speech-preview > label { min-width: 10rem; margin: 0; }
 .speech-preview .service-actions { margin: 0; }
 #dialogue-settings > label:not(.check-label) { max-width: 25rem; }
+.settings-tabs { display: flex; flex-wrap: wrap; gap: .35rem; margin-bottom: 1rem; border-bottom: 1px solid var(--line); }
+.settings-tabs a { padding: .65rem .85rem; color: var(--muted); text-decoration: none; border-bottom: 2px solid transparent; }
+.settings-tabs a[aria-current=page] { color: var(--green); border-bottom-color: var(--green); font-weight: 600; }
+.capability-toolbar { display: flex; justify-content: flex-end; margin-bottom: .75rem; }
+#practice-dialog .actions { align-items: center; }
+#ha-tool-list:not(:empty) { display: grid; gap: .5rem; margin: 1rem 0; }
+#weather-form { padding-bottom: 1rem; margin-bottom: 1rem; border-bottom: 1px solid var(--line); }
+@media (min-width: 800px) {
+  .capability-row { grid-template-columns: minmax(0, 1fr) 7rem 12rem; }
+  #ha-dialog .capability-row { grid-template-columns: minmax(0, 1fr) auto auto; }
+}
