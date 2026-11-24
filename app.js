@@ -12,6 +12,8 @@ let settingsSaving = false;
 let settingsRevision = 0;
 let savedSettings;
 let serverStatus = null;
+let consoleView = 'home';
+let practiceAvailable = false;
 let roomAudio;
 let roomAudioDirty = false;
 let roomAudioPending = false;
@@ -51,6 +53,7 @@ function page(name) {
   const custom = name.startsWith('capability/') && state.abilities[name.slice('capability/'.length)];
   const customPage = name.startsWith('capability/');
   const target = customPage ? 'capability' : titles[name] ? name : 'home';
+  consoleView = target;
   if ((target === 'timers' || target === 'alarms') && state.features?.[target] === false) {
     location.hash = 'abilities';
     return;
@@ -59,8 +62,6 @@ function page(name) {
   document.querySelectorAll('.page').forEach(p => {p.hidden = p.id !== target;});
   document.querySelectorAll('[data-page]').forEach(b => b.classList.toggle('selected', b.dataset.page === name));
   $('page-title').textContent = title[0]; $('page-subtitle').textContent = title[1];
-  if (target === 'automation' && !$('automation-runs').hidden && state.settings) handle(loadExternalTasks);
-  if (target === 'abilities' && state.settings) handle(loadRoomAudio);
   if (target === 'alarms' && state.settings) initializeAlarmTime();
   if (target === 'capability') renderCustomCapability(custom);
   if (target === 'system') {
@@ -170,7 +171,7 @@ function renderAbilities() {
     return capabilityRow(name,description,el('span',enabled?'已启用':'未启用',enabled?'badge':'badge paused'),actions);
   });
   const practice = state.settings?.practice_enabled;
-  const practiceStatus = practice ? (savedPracticeAvailable(state.settings) ? '已启用' : '待配置') : '未启用';
+  const practiceStatus = practice ? (practiceAvailable ? '已启用' : '待配置') : '未启用';
   const practiceRow = capabilityRow('外语陪练', '用选定语言练习口语和情景对话。', el('span', practiceStatus,practiceStatus==='已启用'?'badge':'badge paused'),
     [button('配置', openPractice, 'secondary')]);
   const haConnected = networkConfig?.home_assistant && networkConfig?.ha_key;
@@ -226,7 +227,7 @@ function renderRoomAudioBadge(unavailable = false) {
   $('stat-abilities').textContent = Object.values(state.abilities)
     .filter(a => a.manifest.menu && a.enabled).length +
     Object.keys(clockCapabilities).filter(id=>state.features?.[id]!==false).length +
-    Number(Boolean(roomAudio?.available && roomAudio.config.source)) + Number(Boolean(state.settings?.practice_enabled && savedPracticeAvailable(state.settings)));
+    Number(Boolean(roomAudio?.available && roomAudio.config.source)) + Number(Boolean(state.settings?.practice_enabled && practiceAvailable));
 }
 async function openRoomAudio() {
   $('room-audio-dialog').showModal();
@@ -599,12 +600,20 @@ function refresh(afterLogin = false) {
 }
 async function refreshConsole() {
   try {
-    const session = await api('/api/session');
+    const view=consoleView, hash=location.hash;
+    const query=new URLSearchParams({view});
+    if (view==='system' && (!providerOptions || !dialogueCatalog)) query.set('catalog','1');
+    const frame=await api('/api/console?'+query);
+    const session=frame.session;
     const paired = session.authenticated;
+    $('connection-error').hidden = true;
     $('owner-logout').hidden = $('owner-management').hidden = !session.required || !paired;
     document.querySelector('body > main').hidden = !paired;
     document.querySelector('body > aside').hidden = !paired;
     if (!paired) {
+      serverStatus=null;
+      lastActivityPage=undefined;
+      lastSnapshot='';
       roomAudioRead++;
       roomAudio = undefined;
       roomAudioDirty = false;
@@ -630,22 +639,26 @@ async function refreshConsole() {
       return;
     }
     if ($('pair-dialog').open) $('pair-dialog').close();
-    if (!providerOptions || !dialogueCatalog) [providerOptions, dialogueCatalog] = await Promise.all([api('/api/providers'), api('/api/dialogue/languages')]);
-    const [next, status] = await Promise.all([api('/api/state'), api('/api/status')]); serverStatus = status; $('connection-error').hidden = true;
+    if (frame.providers) providerOptions=frame.providers;
+    if (frame.languages) dialogueCatalog=frame.languages;
+    const next=frame.state;
+    serverStatus=frame.status;
+    practiceAvailable=frame.practice_available;
+    if (view==='home' && consoleView==='home') displayOverviewUsage(frame.usage);
     const snapshot = JSON.stringify(next);
     // Preserve button focus and click targets while polling unchanged state.
     if (snapshot !== lastSnapshot) {state = next; lastSnapshot = snapshot; renderTasks(); renderAbilities(); renderSchedules(); renderClocks(); renderAutomation(); renderEvents(); if (!$("capability").hidden) page(location.hash.slice(1));}
     renderManagement(); updateCountdowns();
-    if (!lastActivityPage || lastActivityPage !== location.hash) {lastActivityPage=location.hash;refreshActivityPage();}
+    if (hash === location.hash && lastActivityPage !== hash) {lastActivityPage=hash;loadViewData();}
     if (!$("alarms").hidden) initializeAlarmTime();
-    if (!$('abilities').hidden && !roomAudioPending) {
-      try {await loadRoomAudio();}
-      catch {
+    if (consoleView==='abilities' && !roomAudioPending) {
+      loadRoomAudio().catch(()=>{
         renderRoomAudioBadge(true);
         $('room-audio-status').textContent = '暂时无法获取听音状态';
-      }
+      });
     }
-    if (!$('automation').hidden && !$('automation-runs').hidden && state.settings?.revision !== externalTaskRevision) await loadExternalTasks();
+    if (consoleView==='automation' && !$('automation-runs').hidden)
+      handle(loadExternalTasks);
   }
   catch {
     $('connection-error').hidden = false;
@@ -734,7 +747,7 @@ document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click
 document.querySelectorAll('[data-page]').forEach(b => b.addEventListener('click', () => {location.hash = b.dataset.page;}));
 document.querySelectorAll('[data-automation]').forEach(b => b.addEventListener('click', () => showAutomation(b.dataset.automation)));
 document.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => {location.hash = b.dataset.go;}));
-window.addEventListener('hashchange', () => page(location.hash.slice(1)));
+window.addEventListener('hashchange', () => {page(location.hash.slice(1));refresh(true);});
 
 const serviceNames = {asr:'语音识别 ASR',llm:'大模型 LLM',tts:'语音合成 TTS',external:'外部 Agent'};
 function formatDuration(seconds) {return seconds < 60 ? `${seconds} 秒` : `${Math.floor(seconds/60)} 分 ${seconds%60} 秒`;}
@@ -769,7 +782,8 @@ function renderManagement() {
   $('runtime-state').textContent = '运行中';
   $('runtime-uptime').textContent = `已运行 ${formatDuration(serverStatus.uptime_seconds)}`;
   $('status-uptime').textContent = formatDuration(serverStatus.uptime_seconds);
-  $('status-memory').textContent = `${(serverStatus.memory_bytes / 1024 / 1024).toFixed(1)} MiB（非进程总内存 / 整机内存）`;
+  if (serverStatus.memory_bytes!==undefined)
+    $('status-memory').textContent = `${(serverStatus.memory_bytes / 1024 / 1024).toFixed(1)} MiB（非进程总内存 / 整机内存）`;
   const services = serverStatus.services || {};
   const rows = ['asr','llm','tts','external'].filter(name => services[name]).map(name => {
     const value = services[name];
@@ -807,8 +821,7 @@ function renderManagement() {
   $('setup-next').textContent = instructions[step] || '';
   $('setup-action').hidden = step === 'verify_device';
   $('setup-action').textContent = {verify:'验证服务',configure_asr:'配置语音识别',configure_tts:'配置语音合成',configure:'配置大模型'}[step] || '';
-  if (!settingsSaving && settingsDirty.size === 0 && settingsRevision !== config.revision) fillSettings(config);
-  if (location.hash === '#usage' && usageRequest === 0) refreshActivityPage();
+  if (providerOptions && dialogueCatalog && !settingsSaving && settingsDirty.size===0 && settingsRevision!==config.revision) fillSettings(config);
 }
 function inputLabel(title,input) {const label=el('label',title);label.append(input);return label;}
 function updateASRFields() {
@@ -1418,7 +1431,16 @@ $('owner-logout').addEventListener('click', () => handle(async () => {
   await api('/api/session/logout', 'POST', {});
   location.reload();
 }, $('owner-logout')));
-page(location.hash.slice(1));refresh();setInterval(refresh,2500);setInterval(updateCountdowns,1000);
+const liveViews=new Set(['device-status','timers','alarms','automation','capability']);
+function refreshLiveView() {
+  if (document.hidden) return;
+  const listening=consoleView==='abilities' && ($('room-audio-dialog').open || roomAudio?.status.running);
+  if (!$('connection-error').hidden || (serverStatus && (liveViews.has(consoleView) || listening))) refresh();
+}
+page(location.hash.slice(1));refresh();
+setInterval(refreshLiveView,5000);
+document.addEventListener('visibilitychange',refreshLiveView);
+setInterval(updateCountdowns,1000);
 
 const activityTypes = {asr: '语音识别', llm: '大模型', tts: '语音合成', external: '外部 Agent', ability: '付费能力', search: '网页搜索'};
 const activityPageSize = 50;
@@ -1666,17 +1688,11 @@ $('dialogue-clear').addEventListener('click',()=>handle(async()=>{
   dialogueOffset=0;
   await loadDialogues();
 },$('dialogue-clear')));
-function refreshActivityPage() {
-  if (!serverStatus) return;
-  if (location.hash==='#usage') loadUsage();
-  if (!$('home').hidden) loadOverviewUsage().catch(() => {
-    $('home-usage-coverage').textContent = '暂时无法读取用量';
-  });
-  if (!networkConfig && (!$('system').hidden || !$('abilities').hidden)) handle(loadNetworkConfig);
-  if (location.hash==='#dialogues'||location.hash==='#system'||location.hash==='#settings/privacy') handle(loadDialogues);
+function loadViewData() {
+  if (consoleView==='usage') loadUsage();
+  if (!networkConfig && (consoleView==='abilities' || location.hash==='#settings/search')) handle(loadNetworkConfig);
+  if (consoleView==='dialogues' || location.hash==='#settings/privacy') handle(loadDialogues);
 }
-window.addEventListener('hashchange',refreshActivityPage);
-setInterval(refreshActivityPage,15000);
 
 const networkRoot = '/api/network-tools';
 let networkConfig;
@@ -1755,14 +1771,6 @@ function renderHATools() {
       },'secondary'),
       button('移除',()=>removeNetworkTool(tool),'secondary')
     ])));
-}
-function savedPracticeAvailable(settings) {
-  if (!settings || !dialogueCatalog) return false;
-  const language = settings.practice_language || 'en';
-  const tts = dialogueCatalog.voices[settings.tts.provider]?.[settings.tts.model] || dialogueCatalog.tts[settings.tts.provider] || [];
-  const asrReady = settings.asr.provider==='sensevoice' ? Boolean(settings.asr.endpoint) : settings.asr.key_configured;
-  return settings.mode!=='external' && asrReady && settings.tts.key_configured &&
-    dialogueCatalog.practice.includes(language) && tts.includes(language) && dialogueCatalog.asr[settings.asr.provider]?.includes(language);
 }
 const practicePath='/api/abilities/language-practice';
 const practiceForm=$('practice-form');
@@ -2010,8 +2018,12 @@ httpForm.addEventListener('submit', event => {
   });
 });
 
-async function loadOverviewUsage() {
-  const {today_calls: calls, month_unpriced: missing, month_costs: costs} = await api('/api/usage/summary');
+function displayOverviewUsage(usage) {
+  if (!usage) {
+    $('home-usage-coverage').textContent='暂时无法读取用量';
+    return;
+  }
+  const {today_calls:calls,month_unpriced:missing,month_costs:costs}=usage;
   $('home-usage-calls').textContent = count(calls);
   $('home-usage-cost').textContent = Object.entries(costs).map(([currency, cost]) => amount(cost,currency)).join(' / ') || (missing ? '—' : '暂无费用');
   $('home-usage-coverage').textContent = (missing ? count(missing)+' 次无法估价 · ' : '') + '仅供参考，以服务商账单为准';
