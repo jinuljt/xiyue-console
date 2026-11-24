@@ -194,7 +194,7 @@ function renderAbilities() {
       $('http-example-dialog').showModal();
     }, 'secondary')]);
   renderCapabilityTable('ability-list',[roomRow,...clockRows,practiceRow,haRow,...custom.map(savedAbilityRow),example,...tools],'暂无能力。');
-  renderCapabilityTable('flow-list',flows.map(savedAbilityRow),'还没有手动流程。');
+  renderCapabilityTable('flow-list',flows.filter(a=>a.manifest.id!=='guided-flow').map(savedAbilityRow),'还没有手动流程。');
   renderCapabilityMenus(custom);
   renderRoomAudioBadge();
 }
@@ -282,9 +282,10 @@ function renderRoomAudio() {
     : '按 IP Webcam 中设置的用户名和密码填写。更换地址或用户名后，请重新输入密码。';
   $('room-audio-save').disabled = roomAudioPending || status.running || !roomAudioDirty;
   $('room-audio-verify').disabled = roomAudioPending || status.running || !roomAudioDraft().source;
+  const listening = status.running || roomAudio.listening;
   $('room-audio-play').disabled = roomAudioPending || status.stage === 'stopping' ||
-    (!status.running && (!available || !draft.source));
-  $('room-audio-play').textContent = status.running ? '停止听音' : '开始听音';
+    (!listening && (!available || !draft.source));
+  $('room-audio-play').textContent = listening ? '停止听音' : '开始听音';
   const labels = {stopped: '已停止', connecting: '正在连接收音设备', connected: '已连接，等待音频数据',
     playing: '正在向音箱送音', reconnecting: '音频流中断或不可用，正在重连',
     paused: '已让行，等待音箱空闲', stopping: '正在停止'};
@@ -318,10 +319,11 @@ $('room-audio-form').addEventListener('submit', event => {
   event.preventDefault();
   handle(() => roomAudioAction(async () => {
     const submitted = roomAudioDraft();
-    await api('/api/room-audio', 'PUT', submitted);
+    if (submitted.source) await api('/api/room-audio/start', 'POST', {config:submitted});
+    else await api('/api/room-audio', 'PUT', submitted);
     roomAudioDirty = false;
     await loadRoomAudio();
-    toast('远程听音设置已保存');
+    toast(submitted.source ? '配置已保存，正在连接音源' : '远程听音设置已保存');
   }));
 });
 $('room-audio-verify').addEventListener('click', () => handle(() => roomAudioAction(async () => {
@@ -337,11 +339,13 @@ $('room-audio-verify').addEventListener('click', () => handle(() => roomAudioAct
   }
 })));
 $('room-audio-play').addEventListener('click', () => handle(() => {
-  const action = roomAudio.status.running ? 'stop' : 'start';
+  const action = roomAudio.status.running || roomAudio.listening ? 'stop' : 'start';
   if (action === 'start' && !$('room-audio-form').reportValidity()) return;
   const body = action === 'start' ? {config: roomAudioDraft()} : {};
   return roomAudioAction(async () => {
-    roomAudio.status = await api(`/api/room-audio/${action}`, 'POST', body);
+    await api(`/api/room-audio/${action}`, 'POST', body);
+    roomAudioDirty = false;
+    await loadRoomAudio();
   });
 }));
 function renderSchedules() {
@@ -445,30 +449,83 @@ $('alarm-form').addEventListener('submit',event=>{
 $('alarm-edit-cancel').addEventListener('click',()=>editAlarm());
 
 const repeatNames={once:'一次',daily:'每天',weekdays:'工作日'};
-const ruleActions={room_start:'开始远程听音',room_stop:'停止远程听音',speak:'播报文字',timer:'启动倒计时',flow:'运行已启用的流程',http_tool:'调用连接工具'};
-const ruleResults={running:'运行中',completed:'已执行',failed:'失败',skipped:'已跳过',interrupted:'已中断'};
+const ruleActions={speak:'播报文字',wait:'等待一段时间',confirm:'播报并等待确认',timer:'启动响铃倒计时',
+  room_start:'开始远程听音',room_stop:'停止远程听音',flow:'运行已导入的流程',http_tool:'调用工具'};
+const ruleResults={running:'运行中',completed:'已完成',failed:'失败',skipped:'已跳过',interrupted:'已中断',cancelled:'已停止'};
+const ruleSources={manual:'手动',scheduled:'定时',entity:'设备状态变化'};
+const rulePhases={action:'正在执行动作',speech:'等待音箱播报',wait:'等待计时结束',confirm:'等待确认'};
+let selectedAutomationRun;
+
 function renderAutomation() {
   const rules=state.rules||[];
   const rows=rules.map(rule=>{
     const schedule=rule.schedule;
+    const latest=rule.runs?.[0];
+    const running=latest?.status==='running';
+    const timed=!rule.trigger || rule.trigger==='schedule';
     const invoke=action=>async()=>{await api('/api/automation/'+rule.id+'/'+action,'POST',{});await refresh();};
-    const actions=[button('编辑',()=>openRule(rule),'secondary'),button('立即运行',invoke('run'),'secondary'),
-      button(schedule.enabled?'停用':'启用',invoke(schedule.enabled?'disable':'enable'),'secondary'),
-      button('删除',async()=>{if(window.confirm('删除这条规则？'))await invoke('remove')();},'secondary')];
-    if (rule.runs?.[0]?.status==='running') for (const item of actions) item.disabled=true;
-    const conditions={room_on:'听音开启时',room_off:'听音停止时'};
-    return [rule.name,repeatNames[schedule.repeat]+' · '+when(schedule.next_at,schedule.timezone),
-      conditions[rule.condition]||'无条件',rule.actions.map(step=>ruleActions[step.action]).join(' → '),schedule.enabled?'已启用':'已停用',
-      ruleResults[rule.runs?.[0]?.status],actions];
+    const actions=[button('编辑',()=>openRule(rule),'secondary'),button('立即运行',async()=>{
+      await invoke('run')();
+      showAutomationRun(rule.id,state.rules.find(item=>item.id===rule.id)?.runs?.[0]?.id);
+    },'secondary'),button(schedule.enabled?'停用':'启用',invoke(schedule.enabled?'disable':'enable'),'secondary'),
+    button('删除',async()=>{if(window.confirm('删除这条自动化？'))await invoke('remove')();},'secondary')];
+    if (running) actions.forEach(item=>{item.disabled=true;});
+    if (!timed && !schedule.enabled) actions[1].disabled=true;
+    if (latest) actions.unshift(button('查看运行',()=>showAutomationRun(rule.id,latest.id),'secondary'));
+    const trigger = timed ? repeatNames[schedule.repeat]+' · '+when(schedule.next_at,schedule.timezone) :
+      rule.trigger==='entity' ? '设备状态变为 '+rule.to_state : '手动';
+    const result = latest && (rulePhases[latest.phase] && running ? rulePhases[latest.phase] : ruleResults[latest.status]);
+    return [rule.name,trigger,rule.actions.map(step=>ruleActions[step.action]).join(' → '),
+      schedule.enabled?'已启用':'已停用',result,actions];
   });
-  tableContent('rule-list',['规则','下次执行','条件','动作','状态','上次执行','操作'],rows,'还没有自动化规则。');
-  const runs=rules.flatMap(rule=>(rule.runs||[]).map(run=>({run,name:rule.name})))
+  tableContent('rule-list',['名称','触发','执行步骤','状态','上次执行','操作'],rows,'暂无自动化。点击「新建自动化」配置你的第一个流程。');
+  const runs=rules.flatMap(rule=>(rule.runs||[]).map(run=>({run,rule})))
     .sort((a,b)=>b.run.at.localeCompare(a.run.at));
-  tableContent('rule-runs',['时间','规则','来源','结果','详情'],runs.map(({run,name})=>[
-    when(run.at),name,run.source==='manual'?'手动':'定时',ruleResults[run.status],
-    [run.step?'动作 '+run.step:'',run.error].filter(Boolean).join(' · ')||'—'
-  ]),'还没有规则运行记录。');
+  tableContent('rule-runs',['时间','流程','来源','结果','操作'],runs.map(({run,rule})=>[
+    when(run.at),rule.name,ruleSources[run.source],ruleResults[run.status],
+    [button('详情',()=>showAutomationRun(rule.id,run.id),'secondary')]
+  ]),'还没有自动化运行记录。');
   renderFlowRuns('flow-runs',state.tasks.filter(t=>t.ability_id!=='todo'&&t.ability_id!=='quick-timer'&&!state.abilities[t.ability_id]?.manifest.menu));
+  if ($('rule-run-dialog').open) renderAutomationRun();
+}
+
+function showAutomationRun(rule,run) {
+  selectedAutomationRun = {rule,run};
+  renderAutomationRun();
+  $('rule-run-dialog').showModal();
+}
+function renderAutomationRun() {
+  const rule = (state.rules || []).find(item=>item.id===selectedAutomationRun.rule);
+  const run = rule?.runs?.find(item=>item.id===selectedAutomationRun.run);
+  const body = $('rule-run-body');
+  if (!rule || !run) {body.replaceChildren(el('p','运行记录暂不可用'));return;}
+  $('rule-run-title').textContent = rule.name+' · 执行详情';
+  const steps = el('ol',undefined,'automation-preview-list');
+  const results = run.results || [];
+  const labels = run.status==='running' ? rule.actions.map(ruleStepDescription) :
+    (run.actions || rule.actions.map(step=>step.action)).map(action=>ruleActions[action]||action);
+  steps.append(...labels.map((description,index)=>{
+    const active = run.status==='running' && index===run.step-1;
+    const label = results[index] || (active ? rulePhases[run.phase] || '即将执行' :
+      run.status==='completed' ? '已执行' : '未执行');
+    return el('li',description+' · '+label);
+  }));
+  const content = [el('p', when(run.at)+' · '+(ruleSources[run.source]||'')+' · '+ruleResults[run.status]),steps];
+  if (run.error) content.push(el('p',run.error,'form-error'));
+  if (run.status==='running' && run.phase==='confirm') {
+    const buttonConfirm = button('确认并继续',async()=>{
+      await api('/api/automation/'+rule.id+'/confirm','POST',{run_id:run.id,step:run.step});
+      await refresh();
+    },'primary');
+    content.push(el('p','可在控制台确认，或唤醒音箱说「继续下一步」。'),buttonConfirm);
+  }
+  if (run.status==='running' && ['wait','confirm'].includes(run.phase)) {
+    content.push(button('停止本次运行',async()=>{
+      await api('/api/automation/'+rule.id+'/cancel','POST',{run_id:run.id});
+      await refresh();
+    },'secondary'));
+  }
+  body.replaceChildren(...content);
 }
 function renderFlowRuns(id,tasks) {
   const rows=[...tasks].reverse().map(task=>{
@@ -485,123 +542,229 @@ function renderFlowRuns(id,tasks) {
   });
   tableContent(id,['流程','开始时间','状态','当前步骤','操作'],rows,'还没有流程运行记录。');
 }
+const ruleForm = $('rule-form');
+let editingRule = '';
+let ruleStepKey = 0;
+
 function appendRuleAction(step) {
   const container=$('rule-actions');
   if(container.children.length>=8)return;
-  const row=el('div',undefined,'rule-action-row');
+  const row=el('li',undefined,'rule-action-row');
+  row.dataset.stepKey=String(++ruleStepKey);
+  const top=el('div',undefined,'rule-step-heading');
   const choice=el('select');
-  choice.setAttribute('aria-label','动作');
-  for(const [key,label] of Object.entries(ruleActions)) {
-    const option=el('option',label);
-    option.value=key;
-    choice.append(option);
-  }
+  choice.setAttribute('aria-label','步骤动作');
+  choice.required=true;
+  choice.append(new Option('选择动作',''),...Object.entries(ruleActions).map(([id,label])=>new Option(label,id)));
   const params=el('div',undefined,'rule-params');
-  const remove=button('移除',()=>{row.remove();updateRuleActions();},'secondary');
-  function showParams() {
+  const tools=el('div',undefined,'table-actions');
+  function reorderButton(label, change) {
+    const control = el('button',label,'secondary');
+    control.type='button';
+    control.onclick=()=>{change();updateRuleActions();};
+    return control;
+  }
+  const up=reorderButton('上移',()=>row.previousElementSibling?.before(row));
+  const down=reorderButton('下移',()=>row.nextElementSibling?.after(row));
+  const remove=reorderButton('移除',()=>row.remove());
+  tools.append(up,down,remove);
+
+  function showParams(initial) {
     params.replaceChildren();
-    if(choice.value==='speak'||choice.value==='timer') {
+    if (['speak','timer','confirm'].includes(choice.value)) {
       const value=el('input');
       value.name='value';
-      value.required=choice.value==='speak';
-      value.maxLength=choice.value==='speak'?330:40;
-      params.append(inputLabel(choice.value==='speak'?'播报内容':'名称（可选）',value));
+      value.required=choice.value!=='timer';
+      value.maxLength=choice.value==='timer'?40:330;
+      value.value=initial?.value||'';
+      const labels={timer:'名称（可选）',speak:'播报内容',confirm:'确认前播报的提示'};
+      params.append(inputLabel(labels[choice.value],value));
     }
-    if(choice.value==='timer') {
+    if (['timer','wait','confirm'].includes(choice.value)) {
       const seconds=el('input');
-      seconds.name='seconds';seconds.type='number';seconds.min=1;seconds.max=86400;seconds.value=60;seconds.required=true;
-      params.append(inputLabel('倒计时秒数',seconds));
+      seconds.name='seconds';seconds.type='number';seconds.min=1;seconds.max=86400;seconds.required=true;
+      seconds.value=initial?.seconds||60;
+      params.append(inputLabel(choice.value==='timer'?'倒计时秒数':'等待秒数',seconds));
     }
-    if(choice.value==='http_tool') {
+    if (choice.value==='confirm') {
+      const timeout=el('select');timeout.name='on_timeout';
+      timeout.append(new Option('结束流程','stop'),new Option('继续下一步','continue'));
+      timeout.value=initial?.on_timeout||'stop';
+      const next=el('select');next.dataset.ruleNext='';
+      params.append(inputLabel('确认后',next),inputLabel('未及时确认时',timeout));
+    }
+    if (choice.value==='http_tool') {
       const selection=el('select');
       selection.name='value';selection.required=true;
-      const tools=(networkConfig?.tools || []).filter(tool=>tool.automation || tool.id===step?.value);
-      selection.append(new Option('选择已授权的工具',''),...tools.map(tool=>new Option(tool.name,tool.id)));
-      selection.value=step?.value || '';
+      const authorized=(networkConfig?.tools || []).filter(tool=>tool.automation);
+      selection.append(new Option('选择已授权的工具',''),...authorized.map(tool=>new Option(tool.name,tool.id)));
+      selection.value=initial?.value || '';
       const inputs=el('div',undefined,'field-grid');
       const render=()=>{
-        const tool=tools.find(item=>item.id===selection.value);
+        const tool=authorized.find(item=>item.id===selection.value);
         inputs.replaceChildren(...(tool?.parameters || []).map(param=>{
           const input=param.type==='boolean'?el('select'):el('input');
           if(param.type==='boolean')input.append(new Option('真','true'),new Option('假','false'));
           if(param.type==='number'){input.type='number';input.step='any';}
           input.dataset.networkArgument=param.name;
           input.required=true;
-          if(tool.id===step?.value && step.parameters?.[param.name]!==undefined)input.value=step.parameters[param.name];
+          if(tool.id===initial?.value && initial.parameters?.[param.name]!==undefined)input.value=initial.parameters[param.name];
           return inputLabel(param.name,input);
         }));
       };
       selection.onchange=render;
       params.append(inputLabel('工具',selection),inputs);
+      if (!authorized.length) params.append(el('p','请在能力中心为工具勾选「允许自动化调用」。','muted'));
       render();
     }
-    if(choice.value==='flow') {
+    if (choice.value==='flow') {
       const selection=el('select');
       selection.name='value';selection.required=true;
-      const blank=el('option','选择已有流程');blank.value='';selection.append(blank);
+      selection.append(new Option('选择已导入的流程',''));
       for(const a of Object.values(state.abilities)) {
-        if(!a.enabled||builtinAbilityIDs.has(a.manifest.id)||a.manifest.fields.some(f=>f.required&&!a.config?.[f.key]&&!f.default))continue;
-        const option=el('option',a.manifest.name);option.value=a.manifest.id;selection.append(option);
+        if(!a.enabled||builtinAbilityIDs.has(a.manifest.id)||a.manifest.id==='guided-flow'||
+          a.manifest.fields.some(f=>f.required&&!a.config?.[f.key]&&!f.default))continue;
+        selection.append(new Option(a.manifest.name,a.manifest.id));
       }
+      selection.value=initial?.value||'';
       params.append(inputLabel('流程',selection));
+      if(selection.options.length===1) params.append(el('p','先导入并启用流程，填好它的必填参数。','muted'));
     }
+    if (choice.value==='room_start' && !roomAudio?.config.source)
+      params.append(el('p','先在能力中心保存远程听音的收音地址。','muted'));
+    if (choice.value==='timer' && state.features?.timers===false)
+      params.append(el('p','此动作需要在能力中心启用倒计时。','muted'));
     updateRuleActions();
   }
-  choice.onchange=showParams;
-  row.append(choice,params,remove);
+
+  choice.onchange=()=>showParams();
+  top.append(choice,tools);
+  row.append(top,params);
   container.append(row);
-  if(step) choice.value=step.action;
-  showParams();
-  if(step) {
-    const value=params.querySelector('[name=value]');
-    if(value) value.value=step.value||'';
-    const seconds=params.querySelector('[name=seconds]');
-    if (seconds) seconds.value=step.seconds;
-  }
+  choice.value=step?.action||'';
+  showParams(step);
 }
+
+function ruleStepDescription(step) {
+  let description = ruleActions[step.action] || step.action;
+  if (step.action==='http_tool') return description+' · '+((networkConfig?.tools || []).find(t=>t.id===step.value)?.name || '工具');
+  if (step.action==='flow') return description+' · '+(state.abilities[step.value]?.manifest.name || '流程');
+  if (step.value) description += ' · '+step.value;
+  if (step.seconds) description += ' · '+step.seconds+' 秒';
+  if (step.next) description += ' · 确认后跳到第 '+step.next+' 步';
+  if (step.on_timeout) description += step.on_timeout==='stop' ? ' · 超时结束' : ' · 超时继续';
+  return description;
+}
+
 function updateRuleActions() {
   const rows=[...$('rule-actions').children];
   $('rule-add-action').disabled=rows.length>=8;
-  $('rule-privacy-note').hidden=!rows.some(row=>row.firstElementChild.value==='room_start');
-  for(const row of rows) row.lastElementChild.disabled=rows.length<=1;
+  $('rule-privacy-note').hidden=!rows.some(row=>row.querySelector('select').value==='room_start');
+  rows.forEach((row,index)=>{
+    const [up,down,remove]=row.querySelectorAll('.rule-step-heading button');
+    up.disabled=index===0;
+    down.disabled=index===rows.length-1;
+    remove.disabled=rows.length<=1;
+    const next=row.querySelector('[data-rule-next]');
+    if (!next) return;
+    const previous=next.value;
+    next.replaceChildren(new Option('继续下一步',''),...rows.slice(index+2).map((target,i)=>
+      new Option('跳到第 '+(index+i+3)+' 步',target.dataset.stepKey)));
+    if ([...next.options].some(option=>option.value===previous)) next.value=previous;
+  });
+  $('rule-preview').hidden=true;
 }
-let editingRule = '';
-async function openRule(rule) {
-  await loadNetworkConfig();
-  const form=$('rule-form');
-  form.reset();
-  editingRule=rule?.id||'';
-  $('rule-title').textContent=rule?'编辑自动化规则':'新建自动化规则';
-  const next=new Date(rule?.schedule.next_at||0);
-  form.elements.local_time.value=next.getTime()>Date.now()?localTimeValue(next):futureLocalTime();
-  if(rule) {
-    form.elements.name.value=rule.name;
-    form.elements.repeat.value=rule.schedule.repeat;
-    form.elements.condition.value=rule.condition||'';
+
+function showRuleFields() {
+  const fields=ruleForm.elements;
+  const trigger=fields.trigger.value;
+  const sections=[['rule-schedule-fields',trigger==='schedule'],['rule-entity-fields',trigger==='entity'],
+    ['rule-hours',$('rule-use-hours').checked]];
+  for (const [id,visible] of sections) {
+    $(id).hidden=!visible;
+    for (const input of $(id).querySelectorAll('input,select')) {
+      input.disabled=!visible;
+      input.required=visible;
+    }
   }
-  form.querySelector('.form-error').textContent='';
+}
+async function openRule(rule) {
+  await Promise.all([loadNetworkConfig(),loadRoomAudio().catch(()=>{})]);
+  ruleForm.reset();
+  const fields=ruleForm.elements;
+  editingRule=rule?.id||'';
+  $('rule-title').textContent=rule?'编辑自动化':'新建自动化';
+  const next=new Date(rule?.schedule.next_at||0);
+  fields.local_time.value=next.getTime()>Date.now()?localTimeValue(next):futureLocalTime();
+  const entityTools=(networkConfig?.tools||[]).filter(tool=>tool.kind==='ha' && tool.operation==='state' && tool.automation);
+  fields.entity_tool.replaceChildren(new Option('选择设备状态工具',''),...entityTools.map(tool=>new Option(tool.name,tool.id)));
+  $('rule-entity-note').hidden=entityTools.length>0;
+  $('rule-use-hours').checked=Boolean(rule?.after);
+  if(rule) {
+    fields.name.value=rule.name;
+    fields.trigger.value=rule.trigger||'schedule';
+    fields.repeat.value=rule.schedule.repeat||'daily';
+    fields.condition.value=rule.condition||'';
+    fields.entity_tool.value=rule.entity_tool||'';
+    fields.to_state.value=rule.to_state||'';
+    fields.after.value=rule.after||'';
+    fields.before.value=rule.before||'';
+  }
+  showRuleFields();
+  ruleForm.querySelector('.form-error').textContent='';
   $('rule-actions').replaceChildren();
-  if(rule) rule.actions.forEach(appendRuleAction);
-  else appendRuleAction();
+  if(rule) {
+    rule.actions.forEach(appendRuleAction);
+    const rows=[...$('rule-actions').children];
+    rule.actions.forEach((step,index)=>{
+      const next=rows[index].querySelector('[data-rule-next]');
+      if (step.next && next) next.value=rows[step.next-1]?.dataset.stepKey || '';
+    });
+  } else appendRuleAction();
   $('rule-dialog').showModal();
 }
-$('rule-add-action').addEventListener('click',()=>appendRuleAction());
-$('rule-form').addEventListener('submit',event=>submitForm(event,async()=>{
-  const form=$('rule-form');
-  const payload=Object.fromEntries(new FormData(form));
-  delete payload.value;
-  delete payload.seconds;
-  payload.actions=[...$('rule-actions').children].map(row=>{
-    const step={action:row.firstElementChild.value};
-    const value=row.querySelector('[name=value]');
-    if(value)step.value=value.value;
+
+function readRule() {
+  const fields=ruleForm.elements;
+  const rows=[...$('rule-actions').children];
+  const actions=rows.map(row=>{
+    const step={action:row.querySelector('select').value};
+    for (const key of ['value','on_timeout']) {
+      const field=row.querySelector('[name='+key+']');
+      if(field)step[key]=field.value;
+    }
     const seconds=row.querySelector('[name=seconds]');
     if(seconds)step.seconds=seconds.valueAsNumber;
+    const next=row.querySelector('[data-rule-next]')?.value;
+    if(next)step.next=rows.findIndex(target=>target.dataset.stepKey===next)+1;
     if(step.action==='http_tool')step.parameters=Object.fromEntries([...row.querySelectorAll('[data-network-argument]')].map(input=>[input.dataset.networkArgument,input.value]));
     return step;
   });
-  await api(editingRule?'/api/automation/'+editingRule:'/api/automation',editingRule?'PUT':'POST',payload);
+  const payload={name:fields.name.value, trigger:fields.trigger.value, condition:fields.condition.value, actions};
+  if (payload.trigger==='schedule') Object.assign(payload,{local_time:fields.local_time.value,repeat:fields.repeat.value});
+  if (payload.trigger==='entity') Object.assign(payload,{entity_tool:fields.entity_tool.value,to_state:fields.to_state.value});
+  if ($('rule-use-hours').checked) Object.assign(payload,{after:fields.after.value,before:fields.before.value});
+  return payload;
+}
+ruleForm.elements.trigger.onchange=showRuleFields;
+$('rule-use-hours').onchange=showRuleFields;
+ruleForm.addEventListener('input',()=>$('rule-preview').hidden=true);
+$('rule-add-action').addEventListener('click',()=>appendRuleAction());
+$('rule-preview-button').onclick=()=>{
+  if (!ruleForm.reportValidity()) return;
+  const draft=readRule();
+  const list=el('ol',undefined,'automation-preview-list');
+  list.append(...draft.actions.map(step=>el('li',ruleStepDescription(step))));
+  const trigger={manual:'手动运行',schedule:'到指定时间',entity:'设备状态变为 '+draft.to_state}[draft.trigger];
+  const preview=$('rule-preview');
+  preview.replaceChildren(el('h4','执行顺序预览'),el('p',trigger+(draft.after?' · '+draft.after+' 至 '+draft.before:'')),
+    list,el('small','此处只显示流程，保存后可在列表中立即运行。','muted'));
+  preview.hidden=false;
+};
+ruleForm.addEventListener('submit',event=>submitForm(event,async()=>{
+  await api(editingRule?'/api/automation/'+editingRule:'/api/automation',editingRule?'PUT':'POST',readRule());
 }));
+
 function renderEvents() {
   const events = [...state.events].reverse().slice(0, 15);
   $('home-events').replaceChildren(...(events.length ? events.map(event => {

@@ -82,16 +82,16 @@
   </section>
   <section id="automation" class="page" hidden>
     <div class="automation-tabs" role="group" aria-label="自动化类型">
-      <button type="button" data-automation="rules" aria-pressed="true" aria-controls="automation-rules">自动化规则</button>
-      <button type="button" data-automation="flows" aria-pressed="false" aria-controls="automation-flows">手动流程</button>
+      <button type="button" data-automation="rules" aria-pressed="true" aria-controls="automation-rules">流程</button>
+      <button type="button" data-automation="flows" aria-pressed="false" aria-controls="automation-flows">导入的流程</button>
       <button type="button" data-automation="runs" aria-pressed="false" aria-controls="automation-runs">运行记录</button>
     </div>
     <section id="automation-rules">
-      <div class="section-heading"><p>按时间触发，可加条件并依次执行多个动作。</p><button id="new-schedule" type="button" class="secondary">＋ 新建规则</button></div>
+      <div class="section-heading"><p><a href="/help.html#automation">查看自动化指南</a></p><button id="new-schedule" type="button" class="secondary">＋ 新建自动化</button></div>
       <div id="rule-list"></div><details id="legacy-schedules" class="task-log" hidden><summary>既有定时计划</summary><div id="schedule-list" class="capability-list"></div></details>
     </section>
     <section id="automation-flows" hidden>
-      <div class="section-heading"><p>配置并运行多步流程，也可以把流程加入定时规则。</p><button id="import-ability" type="button" class="secondary">＋ 导入流程 JSON</button><input id="ability-file" type="file" accept="application/json,.json" hidden></div>
+      <div class="section-heading"><p>运行已导入的流程，或在自动化中添加它们。</p><button id="import-ability" type="button" class="secondary">＋ 导入流程 JSON</button><input id="ability-file" type="file" accept="application/json,.json" hidden></div>
       <div id="flow-list"></div>
     </section>
     <section id="automation-runs" hidden>
@@ -283,7 +283,7 @@
         <li>打开 IP Webcam，允许使用麦克风，滑到页面底部点「启动服务器 / Start server」。</li>
         <li>复制手机上显示的地址，后面加上 <code>/audio.wav</code>，填到下方并点「验证连接」。</li>
       </ol>
-      <p class="muted">其他应用也可用，前提是能提供局域网 HTTP WAV 直播地址。音箱只进行实时播放。</p>
+      <p class="muted">其他应用也可用，前提是能提供局域网 HTTP WAV 直播地址。音箱只进行实时播放。开启后，音箱重启会恢复听音。点「停止听音」可关闭。</p>
       <div class="capability-runtime">
         <div><p id="room-audio-status" role="status">正在读取状态</p><small id="room-audio-last" class="muted"></small></div>
         <button id="room-audio-play" type="button" class="primary" disabled>开始听音</button>
@@ -301,7 +301,7 @@
           <small id="room-audio-auth-note" class="muted">在 IP Webcam 开启访问密码时填写。更换地址或用户名后，请重新输入密码。</small>
         </details>
         <div class="actions">
-          <button id="room-audio-save" type="submit" class="secondary" disabled>保存为默认</button>
+          <button id="room-audio-save" type="submit" class="secondary" disabled>保存并生效</button>
           <button id="room-audio-verify" type="button" class="secondary" disabled>验证连接</button>
         </div>
         <small class="muted">开始听音会直接使用当前填写的设置。</small>
@@ -310,19 +310,37 @@
     </dialog>
 <dialog id="rule-dialog" class="drawer" aria-labelledby="rule-title">
   <form id="rule-form">
-    <div class="dialog-heading"><h2 id="rule-title">新建自动化规则</h2><button type="button" data-close aria-label="关闭">×</button></div>
-    <label>规则名称<input name="name" maxlength="40" required></label>
-    <div class="field-grid">
-      <label>首次执行<input name="local_time" type="datetime-local" required></label>
-      <label>触发频率<select name="repeat"><option value="daily">每天</option><option value="once">一次</option><option value="weekdays">工作日</option></select></label>
+    <div class="dialog-heading"><h2 id="rule-title">新建自动化</h2><button type="button" data-close aria-label="关闭">×</button></div>
+    <label>名称<input name="name" maxlength="40" required></label>
+    <h3>触发</h3>
+    <label>触发方式<select name="trigger"><option value="manual">手动运行</option><option value="schedule">到指定时间</option><option value="entity">Home Assistant 设备状态变化</option></select></label>
+    <div class="field-grid" id="rule-schedule-fields" hidden>
+      <label>首次执行<input name="local_time" type="datetime-local"></label>
+      <label>重复<select name="repeat"><option value="daily">每天</option><option value="once">一次</option><option value="weekdays">工作日</option></select></label>
     </div>
-    <label>执行条件<select name="condition"><option value="">无条件</option><option value="room_on">远程听音已开启</option><option value="room_off">远程听音已停止</option></select></label>
-    <h3>按顺序执行</h3><div id="rule-actions"></div>
-    <button type="button" id="rule-add-action" class="secondary">＋ 添加动作</button>
-    <p id="rule-privacy-note" class="muted" hidden>这条规则可在到点时自动连接音源并在音箱播放。</p>
+    <div id="rule-entity-fields" hidden>
+      <label>读取设备状态的工具<select name="entity_tool"></select></label>
+      <p id="rule-entity-note" class="muted" hidden>请在能力中心配置 Home Assistant，添加「读取状态」实体工具并勾选「允许自动化调用」。系统约每 10 秒读取一次状态。</p>
+      <label>变为此状态时触发<input name="to_state" maxlength="80" placeholder="例如 on"></label>
+    </div>
+    <h3>条件（可选）</h3>
+    <label>远程听音状态<select name="condition"><option value="">任意</option><option value="room_on">已开启</option><option value="room_off">已停止</option></select></label>
+    <label class="check-label"><input id="rule-use-hours" type="checkbox">只在指定时段执行</label>
+    <div class="field-grid" id="rule-hours" hidden>
+      <label>时段开始<input name="after" type="time"></label>
+      <label>时段结束<input name="before" type="time"></label>
+    </div>
+    <h3>执行步骤</h3><ol id="rule-actions"></ol>
+    <button type="button" id="rule-add-action" class="secondary">＋ 添加步骤</button>
+    <p id="rule-privacy-note" class="muted" hidden>流程可自动连接音源并在音箱播放。听音会持续到手动或通过流程停止。</p>
+    <div id="rule-preview" hidden aria-live="polite"></div>
     <p role="alert" class="form-error"></p>
-    <button type="submit" class="primary">保存规则</button>
+    <div class="actions"><button type="button" id="rule-preview-button" class="secondary">预览</button><button type="submit" class="primary">保存自动化</button></div>
   </form>
+</dialog>
+<dialog id="rule-run-dialog" class="drawer" aria-labelledby="rule-run-title">
+  <div class="dialog-heading"><h2 id="rule-run-title">执行详情</h2><button type="button" data-close aria-label="关闭">×</button></div>
+  <div id="rule-run-body" aria-live="polite"></div>
 </dialog>
 <dialog id="task-dialog" aria-labelledby="task-title">
   <form id="task-form"><div class="dialog-heading"><h2 id="task-title">添加待办</h2><button type="button" data-close aria-label="关闭">×</button></div>

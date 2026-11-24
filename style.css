@@ -246,9 +246,15 @@ dialog.drawer .field-grid { grid-template-columns: 1fr; }
 .clock-form label { margin: 0; }
 .clock-form input, .clock-form select { width: auto; }
 .clock-form input[type="number"] { width: 66px; }
-.rule-action-row { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: start; gap: 6px; border: 1px solid var(--line); border-radius: var(--radius); padding: 8px; margin: 8px 0; }
+#rule-actions { margin: 0; padding-inline-start: 22px; }
+.rule-action-row { border: 1px solid var(--line); border-radius: var(--radius); padding: 10px; margin-block: 8px; }
+.rule-step-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+.rule-step-heading select { flex: 1; min-width: 140px; }
+.rule-step-heading .table-actions { margin: 0; }
+.rule-params:not(:empty) { display: grid; gap: 8px; margin-top: 10px; }
 .rule-action-row label { margin: 0; }
-.rule-params { grid-column: 1/-1; grid-row: 2; min-width: 0; }
+.automation-preview-list { padding-inline-start: 24px; }
+.automation-preview-list li + li { margin-top: 8px; }
 
 /* Documentation uses the same palette and menu states */
 .wiki-layout { display: grid; grid-template-columns: minmax(180px,235px) minmax(0,1fr); min-height: 100vh; }
