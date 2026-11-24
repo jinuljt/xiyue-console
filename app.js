@@ -38,7 +38,8 @@ async function api(path, method = 'GET', body) {
 async function handle(fn, b) {if (b) b.disabled = true; try {await fn();} catch (e) {toast(e.message);} finally {if (b) b.disabled = false;}}
 function page(name) {
   const privacy = name === 'settings/privacy';
-  if (privacy) name = 'system';
+  const dialogue = name === 'settings/dialogue';
+  if (privacy || dialogue) name = 'system';
   if (name === 'schedules') {
     name = 'automation';
     showAutomation('rules');
@@ -59,6 +60,7 @@ function page(name) {
   if (target === 'alarms' && state.settings) initializeAlarmTime();
   if (target === 'capability') renderCustomCapability(custom);
   if (privacy) $('privacy-settings').scrollIntoView({block:'start'});
+  if (dialogue) $('dialogue-settings').scrollIntoView({block:'start'});
   $('new-task').hidden = target !== 'tasks';
 }
 function showAutomation(group) {
@@ -158,7 +160,10 @@ function renderAbilities() {
     const actions = enabled ? [button('管理',() => {location.hash=id;},'secondary'),toggle] : [toggle];
     return capabilityRow(name,description,el('span',enabled?'已启用':'未启用',enabled?'badge':'badge paused'),actions);
   });
-  $('ability-list').replaceChildren(roomRow, ...clockRows, ...custom.map(savedAbilityRow));
+  const practice = state.settings?.practice_enabled;
+  const practiceRow = capabilityRow('外语陪练', '和喜悦练英语口语，例如模拟点咖啡。', el('span', practice?'已启用':'未启用',practice?'badge':'badge paused'),
+    [button('配置', () => {location.hash='settings/dialogue';}, 'secondary')]);
+  $('ability-list').replaceChildren(roomRow, ...clockRows, practiceRow, ...custom.map(savedAbilityRow));
   $('flow-list').replaceChildren(...(flows.length ? flows.map(savedAbilityRow) : [empty('还没有手动流程。')]));
   renderCapabilityMenus(custom);
   renderRoomAudioBadge();
@@ -204,7 +209,7 @@ function renderRoomAudioBadge(unavailable = false) {
   $('stat-abilities').textContent = Object.values(state.abilities)
     .filter(a => a.manifest.menu && a.enabled).length +
     Object.keys(clockCapabilities).filter(id=>state.features?.[id]!==false).length +
-    Number(Boolean(roomAudio?.available && roomAudio.config.source));
+    Number(Boolean(roomAudio?.available && roomAudio.config.source)) + Number(Boolean(state.settings?.practice_enabled));
 }
 async function openRoomAudio() {
   $('room-audio-dialog').showModal();
@@ -608,7 +613,7 @@ async function refreshConsole() {
       return;
     }
     if ($('pair-dialog').open) $('pair-dialog').close();
-    if (!providerOptions) providerOptions = await api('/api/providers');
+    if (!providerOptions || !dialogueCatalog) [providerOptions, dialogueCatalog] = await Promise.all([api('/api/providers'), api('/api/dialogue/languages')]);
     const [next, status] = await Promise.all([api('/api/state'), api('/api/status')]); serverStatus = status; $('connection-error').hidden = true;
     const snapshot = JSON.stringify(next);
     // Preserve button focus and click targets while polling unchanged state.
@@ -727,7 +732,7 @@ function setupStep(config) {
       ? config.asr.key_configured && !config.asr.endpoint
       : config.asr.provider === 'sensevoice' && config.asr.endpoint;
     if (!asrReady) return 'configure_asr';
-    if (config.tts.provider === 'doubao' && (!serverStatus.voice.cloud_tts_available || !config.tts.key_configured || !config.tts.model)) return 'configure_tts';
+    if (['doubao','deepseek'].includes(config.tts.provider) && (!serverStatus.voice.cloud_tts_available || !config.tts.key_configured || !config.tts.model)) return 'configure_tts';
     if (modeReady) return 'verify_device';
     return 'configure';
   }
@@ -798,15 +803,74 @@ function updateASRFields() {
   $('asr-guide').href = '/help.html#' + (cloud ? 'asr-doubao' : 'asr-sensevoice');
 }
 $('asr-provider').addEventListener('change', updateASRFields);
+let dialogueCatalog;
+let previousTTSProvider = '';
+function draftTTSVoice() {
+  const provider = $('tts-provider').value;
+  if (provider === 'doubao') return $('tts-voice').value.trim();
+  if (provider === 'deepseek') return $('tts-deepseek-voice').value;
+  return '';
+}
 function updateTTSFields() {
-  const cloud = $('tts-provider').value === 'doubao';
-  $('tts-voice-field').hidden = !cloud;
+  const provider = $('tts-provider').value;
+  const cloud = provider !== 'system';
+  const switched = previousTTSProvider && previousTTSProvider !== provider;
+  previousTTSProvider = provider;
+  if (switched) $('tts-key').value = '';
+  $('tts-voice-field').hidden = provider !== 'doubao';
+  $('tts-deepseek-field').hidden = provider !== 'deepseek';
   $('tts-key-field').hidden = !cloud;
   $('tts-cloud-note').hidden = !cloud;
   $('tts-clear-label').hidden = !savedSettings.tts.key_configured;
-  if (cloud && !$('tts-voice').value) $('tts-voice').value = providerOptions.tts.find(item => item.id === 'doubao')?.model || '';
+  if (switched) $('tts-clear').checked = false;
+  $('tts-key-configured').textContent = savedSettings.tts.key_configured
+    ? (provider === savedSettings.tts.provider ? '已保存，留空则保留。' : '更换服务时请填写新密钥，或清除原有密钥。') : '';
+  $('tts-key-title').textContent = (provider === 'deepseek' ? 'DeepSeek' : '豆包语音')+' API Key';
+  $('tts-cloud-note').textContent = cloud ? '回复和提醒的文字会发送给' + (provider === 'deepseek' ? ' DeepSeek。' : '豆包语音。') : '';
+  if (provider === 'doubao' && !$('tts-voice').value) $('tts-voice').value = providerOptions.tts.find(item => item.id === 'doubao')?.model || '';
+  updateDialogueOptions();
+}
+function setLanguageOptions(select, languages, selected, reset = '') {
+  select.replaceChildren(...dialogueCatalog.languages.filter(item=>languages.includes(item.id)).map(item=>new Option(item.name,item.id)));
+  if (languages.includes(selected)) select.value = selected;
+  else if (reset) select.value = reset;
+  else {select.prepend(new Option('请重新选择回答语言','')); select.value = '';}
+}
+function updateDialogueOptions() {
+  if (!dialogueCatalog || !savedSettings) return;
+  const provider = $('tts-provider').value;
+  const languages = dialogueCatalog.voices[provider]?.[draftTTSVoice()] || dialogueCatalog.tts[provider] || ['zh'];
+  const mode = $('setting-mode').value;
+  const replies = $('reply-language');
+  setLanguageOptions(replies, mode === 'external' ? ['zh'] : languages, replies.value, '');
+  replies.disabled = mode === 'external';
+  if (replies.disabled) replies.value = 'zh';
+  const preview = $('tts-preview-language');
+  setLanguageOptions(preview, provider === 'system' ? ['zh','en','ja','ko'] : languages, preview.value, 'zh');
+  updatePreviewNote();
+
+  const asr = $('asr-provider').value;
+  const asrReady = asr === 'sensevoice' ? Boolean($('asr-endpoint').value.trim())
+    : Boolean($('asr-key').value || (asr === savedSettings.asr.provider && savedSettings.asr.key_configured && !$('asr-clear').checked));
+  const ttsKey = $('tts-key').value || (provider === savedSettings.tts.provider && savedSettings.tts.key_configured && !$('tts-clear').checked);
+  const practice = $('practice-enabled');
+  const supported = languages.includes('en') && dialogueCatalog.asr[asr]?.includes('en') && mode !== 'external';
+  practice.disabled = !(supported && asrReady && ttsKey);
+  if (practice.disabled) practice.checked = false;
+  $('practice-note').textContent = practice.disabled
+    ? '需要可用的英语识别和播报，以及直连大模型或混合模式。自建 SenseVoice 需启用自动语种识别。'
+    : '说「陪我练英语，模拟点咖啡」开始。想回到日常对话时，说「退出陪练」。';
+}
+function updatePreviewNote() {
+  const experiment = $('tts-provider').value === 'system' && $('tts-preview-language').value !== 'zh';
+  $('tts-preview-note').textContent = experiment ? '系统语音的外语能力待验证。这次会把外语原文交给音箱播报。' : '';
 }
 $('tts-provider').addEventListener('change', updateTTSFields);
+$('tts-preview-language').addEventListener('change', updatePreviewNote);
+for (const id of ['tts-voice','tts-deepseek-voice','tts-key','tts-clear','asr-provider','asr-endpoint','asr-key','asr-clear','setting-mode']) {
+  $(id).addEventListener('input', updateDialogueOptions);
+  $(id).addEventListener('change', updateDialogueOptions);
+}
 const timezoneLabels = {'Asia/Shanghai':'中国 · 北京、上海','Asia/Hong_Kong':'香港','Asia/Taipei':'台北',
   'Asia/Tokyo':'东京','Asia/Singapore':'新加坡','Europe/London':'伦敦','America/New_York':'纽约',
   'America/Los_Angeles':'洛杉矶','UTC':'协调世界时'};
@@ -917,12 +981,13 @@ function fillSettings(config) {
   savedSettings=config;
   $('device-asr-fields').hidden = false;
   $('device-tts-fields').hidden = false;
-  $('tts-provider').value = config.tts.provider === 'doubao' ? 'doubao' : 'system';
+  $('tts-provider').value = ['doubao','deepseek'].includes(config.tts.provider) ? config.tts.provider : 'system';
+  previousTTSProvider = $('tts-provider').value;
+  $('tts-deepseek-voice').value = config.tts.model === 'tide' ? 'tide' : 'stella';
   $('tts-voice').value = config.tts.provider === 'doubao' ? config.tts.model : '';
   $('tts-key').value = '';
   $('tts-clear').checked = false;
   $('tts-key-configured').textContent = config.tts.key_configured ? '已保存，留空则保留。' : '';
-  updateTTSFields();
   $('asr-provider').value = config.asr.provider === 'sensevoice' ? 'sensevoice' : 'doubao';
   $('asr-endpoint').value = config.asr.provider === 'sensevoice' ? config.asr.endpoint : '';
   updateASRFields();
@@ -934,6 +999,9 @@ function fillSettings(config) {
   chosenTimezone = config.timezone;
   closeTimezoneList();
   $('setting-mode').value = config.mode;
+  $('reply-language').replaceChildren(new Option('', config.reply_language || 'zh'));
+  $('practice-enabled').checked = Boolean(config.practice_enabled);
+  updateTTSFields();
   $('save-settings').hidden=!settingsDirty;
   $('settings-save-state').textContent=config.updated_at ? `已保存 · ${when(config.updated_at)}` : '默认配置尚未保存';
   if (config.mode !== 'direct') $('advanced-settings').open = true;
@@ -1063,8 +1131,8 @@ function serviceFormValues(name) {
       api_key: $('asr-key').value, clear_key: $('asr-clear').checked};
   }
   if (name === 'tts') {
-    const cloudTTS = $('tts-provider').value === 'doubao';
-    return {provider: $('tts-provider').value, endpoint: '', model: cloudTTS ? $('tts-voice').value : '',
+    const cloudTTS = $('tts-provider').value !== 'system';
+    return {provider: $('tts-provider').value, endpoint: '', model: draftTTSVoice(),
       api_key: cloudTTS ? $('tts-key').value : '', clear_key: $('tts-clear').checked};
   }
   return {provider:$(`${name}-provider`).value, endpoint:$(`${name}-endpoint`).value,
@@ -1074,7 +1142,9 @@ function serviceFormValues(name) {
 async function verifySettings(service, output) {
   output.textContent = service === 'asr' ? '正在录音，请对音箱说一句话…' : service === 'tts' ? '正在让音箱播报…' : '正在验证…';
   try {
-    const result = await api('/api/settings/verify', 'POST', {service, config:serviceFormValues(service)});
+    const payload = {service, config:serviceFormValues(service)};
+    if (service === 'tts') payload.language = $('tts-preview-language').value;
+    const result = await api('/api/settings/verify', 'POST', payload);
     if (service === 'asr') output.textContent = '识别结果 · ' + result.text;
     else if (service === 'tts') output.textContent = '已提交播报，请确认音箱有声音。';
     else output.textContent = `验证成功 · ${result.duration_ms} ms`;
@@ -1087,12 +1157,12 @@ for (const service of ['asr', 'tts']) {
   const control = $(`${service}-verify`);
   control.addEventListener('click', () => handle(() => verifySettings(service, $(`${service}-verify-result`)), control));
 }
-$('settings-form').addEventListener('input',event=>{if(event.target === timezoneInput)return;settingsDirty=true;$('save-settings').hidden=false;$('settings-save-state').textContent='有未保存的修改';});
-$('settings-form').addEventListener('change',()=>{settingsDirty=true;$('save-settings').hidden=false;$('settings-save-state').textContent='有未保存的修改';});
+$('settings-form').addEventListener('input',event=>{if(event.target === timezoneInput || event.target.id === 'tts-preview-language')return;settingsDirty=true;$('save-settings').hidden=false;$('settings-save-state').textContent='有未保存的修改';});
+$('settings-form').addEventListener('change',event=>{if(event.target.id === 'tts-preview-language')return;settingsDirty=true;$('save-settings').hidden=false;$('settings-save-state').textContent='有未保存的修改';});
 $('settings-form').addEventListener('submit',async event=>{
   event.preventDefault();const b=event.currentTarget.querySelector('[type=submit]');b.disabled=true;$('settings-error').textContent='';
   try{
-    const payload={revision:settingsRevision,name:savedSettings.name,wake_word:$('setting-wake').value,timezone:chosenTimezone,mode:$('setting-mode').value};
+    const payload={revision:settingsRevision,name:savedSettings.name,wake_word:$('setting-wake').value,timezone:chosenTimezone,mode:$('setting-mode').value,reply_language:$('reply-language').value,practice_enabled:$('practice-enabled').checked};
     for (const name of ['asr', 'tts']) payload[name] = serviceFormValues(name);
     for (const name of ['llm', 'external']) payload[name] = serviceFormValues(name);
     const config=await api('/api/settings','PUT',payload);settingsDirty=false;fillSettings(config);await refresh();toast('配置已保存');
@@ -1438,7 +1508,7 @@ function displayUsage(data) {
   $('usage-estimated').textContent=[...costs].map(([currency,cost])=>amount(cost,currency)).join(' / ')||'—';
   $('usage-coverage').textContent=`${count(totals.known)} 条可估价 · ${count(totals.calls-totals.known)} 条无法估价`;
   $('usage-voice-units').textContent=totals.metered
-    ? `${(totals.audio/60000).toLocaleString('zh-CN',{maximumFractionDigits:2})} 分钟 / ${count(totals.characters)} 字` : '—';
+    ? `${(totals.audio/60000).toLocaleString('zh-CN',{maximumFractionDigits:2})} 分钟 / ${count(totals.characters)} 字符` : '—';
   $('usage-tokens').textContent=`输入 / 输出 Token · ${count(totals.input)} / ${count(totals.output)}`;
   const currency=$('usage-currency'), currencyChoice=currency.value;
   currency.replaceChildren(...[...costs.keys()].sort().map(code=>new Option(code,code)));
@@ -1455,7 +1525,7 @@ function displayUsage(data) {
     if (row.input_tokens!==undefined || row.output_tokens!==undefined) measured.push(`${row.input_tokens??'—'} / ${row.output_tokens??'—'} Token`);
     if (row.audio_ms!==undefined) measured.push(`${(row.audio_ms/1000).toFixed(2)} 秒（设备计量）`);
     if (row.billable_request!==undefined) measured.push(row.billable_request?'1 次计费请求':'0 次计费请求');
-    if (row.characters!==undefined) measured.push(`${row.characters} 字（设备计量）`);
+    if (row.characters!==undefined) measured.push(`${row.characters} ${row.provider === 'deepseek' ? '计费字符（估算）' : '字符（设备计量）'}`);
     const tr=el('tr');
     const service=`${activityTypes[row.service]||row.service} · ${[row.provider,row.model].filter(Boolean).join(' / ')}`;
     const status=(row.success?'成功':`失败 · ${row.error_code||'服务错误'}`)+(row.test?' · 验证':'');

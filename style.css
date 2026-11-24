@@ -131,3 +131,7 @@
   #home .settings-panel .stats, .network-parameter { grid-template-columns: 1fr; }
   .network-parameter button { justify-self: start; }
 }
+.speech-preview { display: flex; flex-wrap: wrap; align-items: end; gap: .75rem 1rem; }
+.speech-preview > label { min-width: 10rem; margin: 0; }
+.speech-preview .service-actions { margin: 0; }
+#dialogue-settings > label:not(.check-label) { max-width: 25rem; }

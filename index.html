@@ -129,18 +129,29 @@
         <div class="service-actions"><a id="asr-guide" href="/help.html#asr">查看语音识别指南</a><button id="asr-verify" type="button" class="secondary">验证</button></div>
         <p id="asr-verify-result" class="muted" role="status"></p>
       </section>
-      <section class="settings-panel">
+      <section class="settings-panel" id="tts-settings">
         <h2>语音合成 TTS</h2>
         <p id="tts-system-summary"></p>
         <div id="device-tts-fields" class="field-grid" hidden>
-          <label>语音合成服务<select id="tts-provider"><option value="system">音箱系统语音（推荐）</option><option value="doubao">豆包语音合成</option></select></label>
-          <label id="tts-voice-field">豆包音色 ID<input id="tts-voice" maxlength="200"></label>
-          <label id="tts-key-field">豆包语音 API Key<input type="password" id="tts-key" autocomplete="new-password" maxlength="8192"><small id="tts-key-configured"></small></label>
+          <label>语音合成服务<select id="tts-provider"><option value="system">音箱系统语音（推荐）</option><option value="doubao">豆包语音合成</option><option value="deepseek">DeepSeek 语音合成</option></select></label>
+          <label id="tts-voice-field">豆包音色 ID<input id="tts-voice" maxlength="200"><small>使用预置音色可选择多种语言。其他音色先按普通话处理。</small></label>
+          <label id="tts-deepseek-field">DeepSeek 音色<select id="tts-deepseek-voice"><option value="stella">海星（女声）</option><option value="tide">暗潮（男声）</option></select></label>
+          <label id="tts-key-field"><span id="tts-key-title">语音合成 API Key</span><input type="password" id="tts-key" autocomplete="new-password" maxlength="8192"><small id="tts-key-configured"></small></label>
           <label id="tts-clear-label" class="check-label" hidden><input type="checkbox" id="tts-clear">清除已保存的播报凭证</label>
         </div>
-        <p id="tts-cloud-note" hidden>使用豆包播报时，回复和提醒的文字会发送给豆包语音合成。</p>
-        <div class="service-actions"><a href="/help.html#tts">查看语音合成指南</a><button id="tts-verify" type="button" class="secondary">验证</button></div>
+        <p id="tts-cloud-note" hidden></p>
+        <div class="speech-preview">
+          <label>试听语言<select id="tts-preview-language"></select></label>
+          <div class="service-actions"><button id="tts-verify" type="button" class="secondary">试听</button><a href="/help.html#tts">查看语音合成指南</a></div>
+        </div>
+        <p id="tts-preview-note" class="muted"></p>
         <p id="tts-verify-result" class="muted" role="status"></p>
+      </section>
+      <section class="settings-panel" id="dialogue-settings">
+        <div class="panel-heading"><h2>对话语言</h2><p>可选语言随语音合成服务和音色而变化。你也可以说「这题用英文回答」。</p></div>
+        <label>默认回答语言<select id="reply-language" required></select></label>
+        <label class="check-label"><input type="checkbox" id="practice-enabled">启用英语口语陪练</label>
+        <p id="practice-note" class="muted"></p>
       </section>
       <details id="advanced-settings" class="settings-panel">
         <summary>高级接入</summary>
@@ -191,7 +202,7 @@
         <label>类型<select id="usage-type"><option value="">所有类型</option><option value="asr">语音识别</option><option value="llm">大模型</option><option value="tts">语音合成</option><option value="external">外部 Agent</option><option value="ability">付费能力</option><option value="search">网页搜索</option></select></label>
         <label>服务商<select id="usage-provider"><option value="">所有服务商</option></select></label>
       </div>
-      <div class="stats overview-stats"><article><span>调用</span><strong id="usage-requests">—</strong><small id="usage-measured"></small></article><article><span>预估费用</span><strong class="text-stat" id="usage-estimated">—</strong><small id="usage-coverage"></small></article><article><span>音频时长 / 合成字数</span><strong class="text-stat" id="usage-voice-units">—</strong><small id="usage-tokens"></small></article></div>
+      <div class="stats overview-stats"><article><span>调用</span><strong id="usage-requests">—</strong><small id="usage-measured"></small></article><article><span>预估费用</span><strong class="text-stat" id="usage-estimated">—</strong><small id="usage-coverage"></small></article><article><span>音频时长 / 合成字符</span><strong class="text-stat" id="usage-voice-units">—</strong><small id="usage-tokens"></small></article></div>
       <details class="usage-trend"><summary>查看用量趋势</summary>
       <div class="activity-charts">
         <section><h3>每日预估费用</h3><label id="usage-currency-label" hidden>币种<select id="usage-currency"></select></label><div id="usage-cost-chart"></div></section>
