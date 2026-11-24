@@ -163,19 +163,17 @@ function centerCapabilityRow(name, description, status, actions, runtime = null)
   const [info, badge, controls] = capabilityRow(name, description, status, actions);
   return [info, badge, runtime, controls];
 }
-function savedAbilityRow(a, inCenter = false) {
+function savedAbilityRow(a) {
   const m = a.manifest;
   const status = capabilityStatus(a.enabled);
   const description = m.id === 'quick-timer' ? '设置倒计时，到点响铃。' : m.description;
   const detail = button('详情', () => openConfig(m.id), 'secondary');
   detail.setAttribute('aria-label', `查看${m.name}详情`);
-  const row = inCenter ? centerCapabilityRow : capabilityRow;
-  return row(m.name, description, status, [detail]);
+  return centerCapabilityRow(m.name, description, status, [detail]);
 }
 function renderAbilities() {
   const abilities = Object.values(state.abilities).sort((a,b) => a.manifest.id.localeCompare(b.manifest.id));
   const custom = abilities.filter(a => a.manifest.menu && !builtinAbilityIDs.has(a.manifest.id));
-  const legacy = (state.legacy_flows || []).map(id=>state.abilities[id]).filter(Boolean);
   const roomBadge = capabilityStatus();
   roomBadge.id = 'room-audio-enabled';
   const roomRuntime = el('span');
@@ -202,10 +200,8 @@ function renderAbilities() {
     centerCapabilityRow(tool.name,tool.description+' · '+toolChannels(tool),capabilityStatus(true),
       [button('配置',()=>openHTTP(tool),'secondary'),button('移除',()=>removeNetworkTool(tool),'secondary')]));
   tableContent('ability-list',['名称','启用状态','运行情况','操作'],
-    [roomRow,...clockRows,practiceRow,haRow,...custom.map(a=>savedAbilityRow(a,true)),...tools],
+    [roomRow,...clockRows,practiceRow,haRow,...custom.map(savedAbilityRow),...tools],
     '暂无能力。','capability-table ability-center-table');
-  $('legacy-flows').hidden=!legacy.length;
-  renderCapabilityTable('flow-list',legacy.map(a=>savedAbilityRow(a)),'');
   renderCapabilityMenus(custom);
   renderRoomAudioBadge();
 }
@@ -360,26 +356,6 @@ $('room-audio-play').addEventListener('click', () => handle(() => {
     await loadRoomAudio();
   });
 }));
-function renderSchedules() {
-  const existing=state.schedules.filter(sc=>!sc.alarm_name && sc.ability_id!=='quick-timer');
-  $('legacy-schedules').hidden=!existing.length;
-  const rows=existing.map(sc => {
-    const waitingRetry = sc.enabled && sc.repeat === 'once' && sc.failure;
-    const label = waitingRetry ? '执行失败' : sc.enabled ? '已启用' : '任务已创建';
-    const name = state.abilities[sc.ability_id]?.manifest.name || sc.ability_id;
-    const frequency = {once:'一次',daily:'每天',weekdays:'工作日'}[sc.repeat];
-    const actions = [];
-    if (waitingRetry) actions.push(button('重试', async () => {
-      await api(`/api/schedules/${sc.id}/retry`, 'POST', {});
-      await refresh();
-    }, 'secondary'));
-    actions.push(button('删除', async () => {await api(`/api/schedules/${sc.id}`, 'DELETE'); await refresh();}, 'secondary'));
-    const description = [`${when(sc.next_at, sc.timezone)} · ${frequency} · ${sc.timezone}`, sc.inputs.content, sc.failure]
-      .filter(Boolean).join(' · ');
-    return capabilityRow(name, description, el('span', label, sc.enabled && !sc.failure ? 'badge' : 'badge paused'), actions);
-  });
-  renderCapabilityTable('schedule-list',rows,'还没有定时规则。');
-}
 function localTimeValue(date, timeZone = state.settings?.timezone) {
   const fields = new Intl.DateTimeFormat('en-CA', {
     timeZone, year:'numeric', month:'2-digit', day:'2-digit',
@@ -462,10 +438,10 @@ $('alarm-edit-cancel').addEventListener('click',()=>editAlarm());
 
 const repeatNames={once:'一次',daily:'每天',weekdays:'工作日'};
 const ruleActions={speak:'播报文字',wait:'等待一段时间',confirm:'播报并等待确认',timer:'启动响铃倒计时',
-  room_start:'开始远程听音',room_stop:'停止远程听音',flow:'运行旧版流程',http_tool:'调用工具',if:'判断变量',tone:'播放提示音'};
+  room_start:'开始远程听音',room_stop:'停止远程听音',flow:'运行子流程',http_tool:'调用工具',if:'判断变量',tone:'播放提示音'};
 const ruleResults={running:'运行中',completed:'已完成',failed:'失败',skipped:'已跳过',interrupted:'已中断',cancelled:'已停止'};
 const ruleSources={manual:'手动',scheduled:'定时',entity:'设备状态变化'};
-const rulePhases={action:'正在执行动作',speech:'等待音箱播报',wait:'等待计时结束',confirm:'等待确认',child:'等待旧版子流程'};
+const rulePhases={action:'正在执行动作',speech:'等待音箱播报',wait:'等待计时结束',confirm:'等待确认',child:'等待子流程'};
 let selectedAutomationRun;
 
 function renderAutomation() {
@@ -497,8 +473,7 @@ function renderAutomation() {
   tableContent('rule-runs',['时间','流程','来源','结果','操作'],runs.map(({run,rule})=>[
     when(run.at),rule.name,ruleSources[run.source],ruleResults[run.status],
     [button('详情',()=>showAutomationRun(rule.id,run.id),'secondary')]
-  ]),'还没有自动化运行记录。');
-  renderFlowRuns('flow-runs',state.tasks.filter(t=>t.ability_id!=='todo'&&t.ability_id!=='quick-timer'&&!state.abilities[t.ability_id]?.manifest.menu));
+  ]),'还没有运行记录。');
   if ($('rule-run-dialog').open) renderAutomationRun();
 }
 
@@ -664,7 +639,7 @@ function appendRuleAction(step) {
     if (choice.value==='flow') {
       const selection=el('select');
       selection.name='value';selection.required=true;
-      selection.append(new Option('选择旧版流程',''));
+      selection.append(new Option('选择子流程',''));
       for(const a of Object.values(state.abilities)) {
         if(!a.enabled||builtinAbilityIDs.has(a.manifest.id)||a.manifest.id==='guided-flow'||
           a.manifest.fields.some(f=>f.required&&!a.config?.[f.key]&&!f.default))continue;
@@ -672,7 +647,7 @@ function appendRuleAction(step) {
       }
       selection.value=initial?.value||'';
       params.append(inputLabel('流程',selection));
-      if(selection.options.length===1) params.append(el('p','此步骤引用旧版流程，请先启用它并配置必填参数。','muted'));
+      if(selection.options.length===1) params.append(el('p','请启用子流程并填写必填参数。','muted'));
     }
     if (choice.value==='room_start' && !roomAudio?.config.source)
       params.append(el('p','先在能力中心保存远程听音的收音地址。','muted'));
@@ -906,7 +881,7 @@ async function refreshConsole() {
     if (view==='home' && consoleView==='home') displayOverviewUsage(frame.usage);
     const snapshot = JSON.stringify(next);
     // Preserve button focus and click targets while polling unchanged state.
-    if (snapshot !== lastSnapshot) {state = next; lastSnapshot = snapshot; renderTasks(); renderAbilities(); renderSchedules(); renderClocks(); renderAutomation(); renderEvents(); if (!$("capability").hidden) page(location.hash.slice(1));}
+    if (snapshot !== lastSnapshot) {state = next; lastSnapshot = snapshot; renderTasks(); renderAbilities(); renderClocks(); renderAutomation(); renderEvents(); if (!$("capability").hidden) page(location.hash.slice(1));}
     renderManagement(); updateCountdowns();
     if (hash === location.hash && lastActivityPage !== hash) {lastActivityPage=hash;loadViewData();}
     if (!$("alarms").hidden) initializeAlarmTime();
