@@ -56,7 +56,7 @@ function page(name) {
   const customPage = name.startsWith('capability/');
   const target = customPage ? 'capability' : titles[name] ? name : 'home';
   consoleView = target;
-  if ((target === 'timers' || target === 'alarms') && state.features?.[target] === false) {
+  if (Object.hasOwn(clockCapabilities,target) && state.features?.[target] === false) {
     location.hash = 'abilities';
     return;
   }
@@ -175,7 +175,7 @@ function savedAbilityRow(a) {
 }
 function renderAbilities() {
   const abilities = Object.values(state.abilities).sort((a,b) => a.manifest.id.localeCompare(b.manifest.id));
-  const custom = abilities.filter(a => a.manifest.menu && !builtinAbilityIDs.has(a.manifest.id));
+  const custom = abilities.filter(a => a.manifest.menu);
   const roomBadge = capabilityStatus();
   roomBadge.id = 'room-audio-enabled';
   const roomRuntime = el('span');
@@ -439,10 +439,16 @@ $('alarm-form').addEventListener('submit',event=>{
 $('alarm-edit-cancel').addEventListener('click',()=>editAlarm());
 
 const repeatNames={once:'一次',daily:'每天',weekdays:'工作日'};
-const ruleActions={speak:'播报文字',wait:'等待一段时间',confirm:'播报并等待确认',timer:'启动响铃倒计时',
-  room_start:'开始远程听音',room_stop:'停止远程听音',flow:'运行子流程',http_tool:'调用工具',if:'判断变量',tone:'播放提示音'};
+const ruleActions={speak:'播报文字',wait:'等待一段时间',confirm:'播报并等待确认',
+  flow:'运行子流程',tool:'调用工具',if:'判断变量',tone:'播放提示音'};
+const pastRuleActions={room_start:'远程听音 · 开始',room_stop:'远程听音 · 停止',http_tool:'调用工具',timer:'启动响铃倒计时'};
+let automationOptions={tools:[],states:{}};
+const automationToolName=id=>automationOptions.tools.find(item=>item.id===id)?.name;
+const stateName=id=>Object.hasOwn(automationOptions.states,id)?automationOptions.states[id].name:'不可用的状态来源';
+const stateValue=(id,value)=>Object.hasOwn(automationOptions.states,id)?automationOptions.states[id].options?.[value]||value:value;
+const stepLabel=step=>step.action==='tool'?automationToolName(step.value)||ruleActions.tool:ruleActions[step.action]||step.action;
 const ruleResults={running:'运行中',completed:'已完成',failed:'失败',skipped:'已跳过',interrupted:'已中断',cancelled:'已停止'};
-const ruleSources={manual:'手动',scheduled:'定时',entity:'设备状态变化'};
+const ruleSources={manual:'手动',scheduled:'定时',entity:'状态变化',state:'状态变化'};
 const rulePhases={action:'正在执行动作',speech:'等待音箱播报',wait:'等待计时结束',confirm:'等待确认',child:'等待子流程'};
 let selectedAutomationRun;
 
@@ -464,9 +470,9 @@ function renderAutomation() {
     if (!timed && !schedule.enabled) actions[1].disabled=true;
     if (latest) actions.unshift(button('查看运行',()=>showAutomationRun(rule.id,latest.id),'secondary'));
     const trigger = timed ? repeatNames[schedule.repeat]+' · '+when(schedule.next_at,schedule.timezone) :
-      rule.trigger==='entity' ? '设备状态变为 '+rule.to_state : '手动';
+      rule.trigger==='state' ? stateName(rule.state_source)+' 变为 '+stateValue(rule.state_source,rule.to_state) : '手动';
     const result = latest && (rulePhases[latest.phase] && running ? rulePhases[latest.phase] : ruleResults[latest.status]);
-    return [rule.name,trigger,rule.actions.map(step=>ruleActions[step.action]).join(' → '),
+    return [rule.name,trigger,rule.actions.map(stepLabel).join(' → '),
       schedule.enabled?'已启用':'已停用',result,actions];
   });
   tableContent('rule-list',['名称','触发','执行步骤','状态','上次执行','操作'],rows,'暂无自动化。点击「新建自动化」配置你的第一个流程。');
@@ -493,7 +499,7 @@ function renderAutomationRun() {
   const steps = el('ol',undefined,'automation-preview-list');
   const results = run.results || [];
   const labels = run.status==='running' ? rule.actions.map(ruleStepDescription) :
-    (run.actions || rule.actions.map(step=>step.action)).map(action=>ruleActions[action]||action);
+    (run.actions?.map(action=>Object.hasOwn(ruleActions,action)?ruleActions[action]:Object.hasOwn(pastRuleActions,action)?pastRuleActions[action]:action) || rule.actions.map(stepLabel));
   steps.append(...labels.map((description,index)=>{
     const active = run.status==='running' && index===run.step-1;
     const label = results[index] || (active ? rulePhases[run.phase] || '即将执行' :
@@ -583,20 +589,21 @@ function selectRulePart(part) {
   placeRulePart();
 }
 
-function ruleDuration(seconds, kind) {
-  const duration=el('input');duration.name='seconds';duration.type='number';
+function ruleDuration(seconds, kind, field) {
+  const duration=el('input');duration.name=field ? '' : 'seconds';duration.type='number';
   duration.min=kind==='confirm'?0:1;duration.required=true;
   const unit=el('select');unit.dataset.durationUnit='';
   unit.append(new Option('秒','1'),new Option('分钟','60'),new Option('小时','3600'));
   const scale=seconds>=3600&&seconds%3600===0?3600:seconds>=60&&seconds%60===0?60:1;
   unit.value=String(scale);
   duration.value=seconds/scale;
-  const updateLimit=()=>{duration.max=Math.floor((kind==='wait'?604800:86400)/Number(unit.value));};
+  const updateLimit=()=>{duration.max=Math.floor((field?.max || (kind==='wait'?604800:86400))/Number(unit.value));};
   unit.onchange=updateLimit;
   updateLimit();
   const controls=el('div',undefined,'rule-duration');
-  const label=kind==='timer'?'倒计时时长':kind==='confirm'?'等待时长（0 表示一直等待）':'等待时长';
+  const label=field?.label || (kind==='confirm'?'等待时长（0 表示一直等待）':'等待时长');
   controls.append(inputLabel(label,duration),inputLabel('单位',unit));
+  if (field) duration.dataset.toolArgument=field.name;
   return controls;
 }
 
@@ -638,17 +645,17 @@ function appendRuleAction(step) {
 
   function showParams(initial) {
     params.replaceChildren();
-    if (['speak','timer','confirm'].includes(choice.value)) {
+    if (['speak','confirm'].includes(choice.value)) {
       const value=el('input');
       value.name='value';
-      value.required=choice.value!=='timer';
-      value.maxLength=choice.value==='timer'?40:1333;
+      value.required=true;
+      value.maxLength=1333;
       if (choice.value==='speak'||choice.value==='confirm') value.placeholder='可引用前一步的变量，例如 {{order.status}}';
       value.value=initial?.value||'';
-      const labels={timer:'名称（可选）',speak:'播报内容',confirm:'确认前播报的提示'};
+      const labels={speak:'播报内容',confirm:'确认前播报的提示'};
       params.append(inputLabel(labels[choice.value],value));
     }
-    if (['timer','wait','confirm'].includes(choice.value)) {
+    if (['wait','confirm'].includes(choice.value)) {
       const seconds=initial ? initial.seconds ?? (choice.value==='confirm'?0:60) : 60;
       params.append(ruleDuration(seconds,choice.value));
     }
@@ -682,29 +689,44 @@ function appendRuleAction(step) {
       params.append(inputLabel('变量或字段',path),inputLabel('值类型',comparison),inputLabel('等于',expected),
         inputLabel('不相等时',target),el('small','相等时继续执行下一步。','muted'));
     }
-    if (choice.value==='http_tool') {
+    if (choice.value==='tool') {
       const selection=el('select');
       selection.name='value';selection.required=true;
-      const authorized=(networkConfig?.tools || []).filter(tool=>tool.automation);
-      selection.append(new Option('选择已授权的工具',''),...authorized.map(tool=>new Option(tool.name,tool.id)));
-      selection.value=initial?.value || '';
+      const options=automationOptions.tools;
+      selection.append(new Option('选择工具',''),...options.map(tool=>new Option(tool.name,tool.id)));
+      if (initial?.value && !options.some(tool=>tool.id===initial.value)) {
+        const missing=new Option('原工具不可用，请重新选择','');
+        selection.options[0].replaceWith(missing);
+      }
+      selection.value=options.some(tool=>tool.id===initial?.value)?initial.value:'';
       const inputs=el('div',undefined,'field-grid');
+      const details=el('div');
       const render=()=>{
-        const tool=authorized.find(item=>item.id===selection.value);
+        const tool=options.find(item=>item.id===selection.value);
+        const previous=tool?.id===initial?.value?initial?.parameters:{};
         inputs.replaceChildren(...(tool?.parameters || []).map(param=>{
+          if (param.type==='duration') return ruleDuration(Number(previous?.[param.name] || 60),'tool',param);
           const input=el('input');
-          input.placeholder=param.type==='boolean'?'true、false 或 {{变量}}':'参数值或 {{变量}}';
-          input.dataset.networkArgument=param.name;
-          input.required=true;
-          if(tool.id===initial?.value && initial.parameters?.[param.name]!==undefined)input.value=initial.parameters[param.name];
-          return inputLabel(param.name,input);
+          input.placeholder=param.type==='boolean'?'true、false 或 {{变量}}':'';
+          input.dataset.toolArgument=param.name;
+          input.required=param.type!=='optional_text';
+          if(param.max) input.maxLength=param.max;
+          input.value=previous?.[param.name]??'';
+          return inputLabel(param.label||param.name,input);
         }));
+        details.replaceChildren();
+        if (tool?.result) {
+          const saveAs=el('input');saveAs.name='save_as';saveAs.maxLength=32;
+          saveAs.pattern='[A-Za-z_][A-Za-z0-9_]{0,31}';saveAs.placeholder='例如 result';
+          saveAs.value=tool.id===initial?.value?initial.save_as||'':'';
+          details.append(inputLabel('结果变量名（可选）',saveAs));
+        }
+        for (const text of [tool?.note,tool?.hint]) {
+          if (text) details.append(el('p',text,'muted'));
+        }
       };
       selection.onchange=render;
-      const saveAs=el('input');saveAs.name='save_as';saveAs.maxLength=32;
-      saveAs.pattern='[A-Za-z_][A-Za-z0-9_]{0,31}';saveAs.placeholder='例如 order';saveAs.value=initial?.save_as||'';
-      params.append(inputLabel('工具',selection),inputs,inputLabel('结果变量名（可选）',saveAs));
-      if (!authorized.length) params.append(el('p','请在能力中心为工具勾选「允许自动化调用」。','muted'));
+      params.append(inputLabel('工具',selection),inputs,details);
       render();
     }
     if (choice.value==='flow') {
@@ -720,10 +742,6 @@ function appendRuleAction(step) {
       params.append(inputLabel('流程',selection));
       if(selection.options.length===1) params.append(el('p','请启用子流程并填写必填参数。','muted'));
     }
-    if (choice.value==='room_start' && !roomAudio?.config.source)
-      params.append(el('p','先在能力中心保存远程听音的收音地址。','muted'));
-    if (choice.value==='timer' && state.features?.timers===false)
-      params.append(el('p','此动作需要在能力中心启用倒计时。','muted'));
     updateRuleActions();
   }
 
@@ -740,8 +758,8 @@ function appendRuleAction(step) {
 }
 
 function ruleStepDescription(step) {
-  let description = ruleActions[step.action] || step.action;
-  if (step.action==='http_tool') return description+' · '+((networkConfig?.tools || []).find(t=>t.id===step.value)?.name || '工具')+(step.save_as?' · 保存为 '+step.save_as:'');
+  let description = stepLabel(step);
+  if (step.action==='tool') return description+(step.save_as?' · 保存为 '+step.save_as:'');
   if (step.action==='if') return description+' · '+step.value+' 等于 '+JSON.stringify(step.equals)+(step.next?' · 不等时跳到第 '+step.next+' 步':' · 不等时结束');
   if (step.action==='flow') return description+' · '+(state.abilities[step.value]?.manifest.name || '流程');
   if (step.value) description += ' · '+step.value;
@@ -751,14 +769,82 @@ function ruleStepDescription(step) {
   return description;
 }
 
+function stateFields(initial, title) {
+  const fields=el('div',undefined,'field-grid rule-state-fields');
+  const source=el('select');
+  const values=el('div');
+  source.dataset.stateSource='';
+  source.required=true;
+  const options=Object.values(automationOptions.states).sort((a,b)=>a.name.localeCompare(b.name,'zh'));
+  const missing=initial?.source && !options.some(item=>item.id===initial.source);
+  source.append(new Option(missing?'原状态来源不可用，请重新选择':'选择状态来源',''),
+    ...options.map(item=>new Option(item.name,item.id)));
+  source.value=missing?'':initial?.source||'';
+  const render=value=>{
+    const choices=options.find(item=>item.id===source.value)?.options;
+    const expected=el(choices?'select':'input');
+    expected.dataset.stateValue='';
+    expected.required=true;
+    if (choices) expected.append(new Option('选择状态',''),...Object.entries(choices).map(([key,label])=>new Option(label,key)));
+    else expected.maxLength=80;
+    expected.value=value;
+    values.replaceChildren(inputLabel(title,expected));
+  };
+  source.onchange=()=>render('');
+  fields.append(inputLabel('状态来源',source),values);
+  render(missing?'':initial?.equals||'');
+  return fields;
+}
+
+function readStateFields(fields) {
+  return {source:fields.querySelector('[data-state-source]').value,equals:fields.querySelector('[data-state-value]').value.trim()};
+}
+
+function ruleStateConditions() {
+  return [...$('rule-state-conditions').querySelectorAll('.rule-state-fields')].map(readStateFields);
+}
+
+function updateConditionControls() {
+  const count=$('rule-state-conditions').children.length;
+  const available=Object.keys(automationOptions.states).length;
+  $('rule-add-condition').disabled=count>=Math.min(8,available);
+  $('rule-state-note').hidden=available>0;
+}
+
+function appendStateCondition(initial) {
+  const row=el('div',undefined,'rule-state-condition');
+  const remove=el('button','移除条件','secondary');
+  remove.type='button';
+  remove.onclick=()=>{
+    row.remove();
+    updateConditionControls();
+    ruleEditorDirty=true;
+    updateRuleOutline();
+  };
+  row.append(stateFields(initial,'等于'),remove);
+  $('rule-state-conditions').append(row);
+  updateConditionControls();
+}
+
+$('rule-add-condition').onclick=()=>{
+  appendStateCondition();
+  $('rule-state-conditions').lastElementChild.querySelector('select').focus();
+  ruleEditorDirty=true;
+  updateRuleOutline();
+};
+
+function describeStateCondition({source,equals}, verb) {
+  return [source?stateName(source):'状态来源',verb,source&&equals?stateValue(source,equals):''].filter(Boolean).join(' ');
+}
+
 function updateRuleOutline() {
-  const {trigger,local_time,repeat,entity_tool,to_state,condition,after,before}=ruleForm.elements;
+  const {trigger,local_time,repeat,after,before}=ruleForm.elements;
   const parts=trigger.value==='schedule' ? [local_time.value.replace('T',' '),repeatNames[repeat.value]] :
-    trigger.value==='entity' ? [entity_tool.value && entity_tool.selectedOptions[0]?.textContent,to_state.value] : ['手动运行'];
+    trigger.value==='state' ? [describeStateCondition(readStateFields($('rule-trigger-state-fields')),'变为')] : ['手动运行'];
   $('rule-trigger-summary').textContent=parts.filter(Boolean).join(' · ') || trigger.selectedOptions[0]?.textContent;
-  const conditions=[condition.value==='room_on'?'听音已开启':condition.value==='room_off'?'听音已停止':''];
+  const conditions=ruleStateConditions().map(item=>describeStateCondition(item,'等于'));
   if ($('rule-use-hours').checked) conditions.push(after.value&&before.value?after.value+'–'+before.value:'指定时段');
-  $('rule-condition-summary').textContent=conditions.filter(Boolean).join(' · ') || '任意时间执行';
+  $('rule-condition-summary').textContent=conditions.filter(Boolean).join(' · ') || '无条件';
   const rows=[...$('rule-actions').children];
   rows.forEach((row,index)=>{
     const {choice,params,stepTitle,summary,heading}=ruleStepParts.get(row);
@@ -779,7 +865,6 @@ function updateRuleOutline() {
 function updateRuleActions() {
   const rows=[...$('rule-actions').children];
   $('rule-add-action').disabled=rows.length>=64;
-  $('rule-privacy-note').hidden=!rows.some(row=>ruleStepParts.get(row).choice.value==='room_start');
   rows.forEach((row,index)=>{
     const part=ruleStepParts.get(row);
     const [up,down,remove]=part.tools;
@@ -801,7 +886,7 @@ function updateRuleActions() {
 function showRuleFields() {
   const fields=ruleForm.elements;
   const trigger=fields.trigger.value;
-  const sections=[['rule-schedule-fields',trigger==='schedule'],['rule-entity-fields',trigger==='entity'],
+  const sections=[['rule-schedule-fields',trigger==='schedule'],['rule-state-trigger',trigger==='state'],
     ['rule-hours',$('rule-use-hours').checked]];
   for (const [id,visible] of sections) {
     $(id).hidden=!visible;
@@ -812,7 +897,7 @@ function showRuleFields() {
   }
 }
 async function openRule(rule, draft, toolNames = {}) {
-  await Promise.all([loadNetworkConfig(),loadRoomAudio().catch(()=>{})]);
+  automationOptions=await api('/api/automation/options');
   selectRulePart(null);
   ruleForm.reset();
   const fields=ruleForm.elements;
@@ -823,34 +908,33 @@ async function openRule(rule, draft, toolNames = {}) {
   note.textContent='检查流程后保存。导入文件不会立即启动流程。';
   const next=new Date(rule?.schedule.next_at||0);
   fields.local_time.value=next.getTime()>Date.now()?localTimeValue(next):futureLocalTime();
-  const authorized=(networkConfig?.tools||[]).filter(tool=>tool.automation);
-  const entityTools=authorized.filter(tool=>tool.kind==='ha' && tool.operation==='state');
+  const states=Object.values(automationOptions.states);
   if (draft) {
     const missing=[];
     const resolve=(id, choices)=>{
-      if (choices.some(tool=>tool.id===id)) return id;
+      if (choices.some(item=>item.id===id)) return id;
       const name=Object.hasOwn(toolNames,id)?toolNames[id]:'';
-      const matches=choices.filter(tool=>tool.name===name);
+      const matches=choices.filter(item=>item.name===name);
       if (matches.length===1) return matches[0].id;
-      missing.push(name||'未知工具');
-      return '';
+      missing.push(name||'未安装或未授权的来源');
+      return id;
     };
-    draft.actions=draft.actions.map(step=>step.action==='http_tool'?{...step,value:resolve(step.value,authorized)}:step);
-    if (draft.trigger==='entity') draft.entity_tool=resolve(draft.entity_tool,entityTools);
+    draft.actions=draft.actions.map(step=>step.action==='tool'?{...step,value:resolve(step.value,automationOptions.tools)}:step);
+    if (draft.trigger==='state') draft.state_source=resolve(draft.state_source,states);
+    for (const condition of draft.state_conditions||[]) condition.source=resolve(condition.source,states);
     if (missing.length) note.textContent+=' 请重新选择 '+[...new Set(missing)].join('、')+'。';
     fields.local_time.value=draft.local_time||'';
   }
-  fields.entity_tool.replaceChildren(new Option('选择设备状态工具',''),...entityTools.map(tool=>new Option(tool.name,tool.id)));
-  $('rule-entity-note').hidden=entityTools.length>0;
   const source = rule || draft;
+  $('rule-trigger-state-fields').replaceChildren(stateFields(source?.trigger==='state'?{source:source.state_source,equals:source.to_state}:null,'变为此状态时触发'));
+  $('rule-state-conditions').replaceChildren();
+  for (const condition of source?.state_conditions||[]) appendStateCondition(condition);
+  updateConditionControls();
   $('rule-use-hours').checked=Boolean(source?.after);
   if(source) {
     fields.name.value=source.name;
     fields.trigger.value=source.trigger||'schedule';
     fields.repeat.value=source.schedule?.repeat||source.repeat||'daily';
-    fields.condition.value=source.condition||'';
-    fields.entity_tool.value=source.entity_tool||'';
-    fields.to_state.value=source.to_state||'';
     fields.after.value=source.after||'';
     fields.before.value=source.before||'';
   }
@@ -893,12 +977,18 @@ function readRule() {
       try {step.equals=params.querySelector('[name=comparison]').value==='json'?JSON.parse(literal):literal;}
       catch {throw new Error('判断值请输入有效数字、true、false 或 null');}
     }
-    if(step.action==='http_tool')step.parameters=Object.fromEntries([...params.querySelectorAll('[data-network-argument]')].map(input=>[input.dataset.networkArgument,input.value]));
+    if(step.action==='tool')step.parameters=Object.fromEntries([...params.querySelectorAll('[data-tool-argument]')].map(input=>{
+      const unit=input.closest('.rule-duration')?.querySelector('[data-duration-unit]');
+      return [input.dataset.toolArgument,unit?String(input.valueAsNumber*Number(unit.value)):input.value];
+    }));
     return step;
   });
-  const payload={name:fields.name.value, trigger:fields.trigger.value, condition:fields.condition.value, actions};
+  const payload={name:fields.name.value, trigger:fields.trigger.value, state_conditions:ruleStateConditions(), actions};
   if (payload.trigger==='schedule') Object.assign(payload,{local_time:fields.local_time.value,repeat:fields.repeat.value});
-  if (payload.trigger==='entity') Object.assign(payload,{entity_tool:fields.entity_tool.value,to_state:fields.to_state.value});
+  if (payload.trigger==='state') {
+    const selected=readStateFields($('rule-trigger-state-fields'));
+    Object.assign(payload,{state_source:selected.source,to_state:selected.equals});
+  }
   if ($('rule-use-hours').checked) Object.assign(payload,{after:fields.after.value,before:fields.before.value});
   return payload;
 }
@@ -907,6 +997,7 @@ $('rule-use-hours').onchange=showRuleFields;
 for (const event of ['input','change']) {
   ruleForm.addEventListener(event,()=>{
     ruleEditorDirty=true;
+    showRuleFields();
     updateRuleOutline();
   });
 }
@@ -931,9 +1022,11 @@ $('rule-preview-button').onclick=()=>handle(()=>{
   const draft=readRule();
   const list=el('ol',undefined,'automation-preview-list');
   list.append(...draft.actions.map(step=>el('li',ruleStepDescription(step))));
-  const trigger={manual:'手动运行',schedule:'到指定时间',entity:'设备状态变为 '+draft.to_state}[draft.trigger];
+  const trigger={manual:'手动运行',schedule:'到指定时间',state:describeStateCondition({source:draft.state_source,equals:draft.to_state},'变为')}[draft.trigger];
   const preview=$('rule-preview');
-  preview.replaceChildren(el('h4','执行顺序预览'),el('p',trigger+(draft.after?' · '+draft.after+' 至 '+draft.before:'')),
+  const conditions=draft.state_conditions.map(item=>describeStateCondition(item,'等于'));
+  if (draft.after) conditions.push(draft.after+' 至 '+draft.before);
+  preview.replaceChildren(el('h4','执行顺序预览'),el('p',[trigger,...conditions].join(' · ')),
     list,el('small','此处只显示流程，保存后可在列表中立即运行。','muted'));
   preview.hidden=false;
   preview.scrollIntoView({block:'nearest'});
@@ -1022,6 +1115,8 @@ async function refreshConsole() {
     if ($('pair-dialog').open) $('pair-dialog').close();
     if (frame.providers) providerOptions=frame.providers;
     if (frame.languages) dialogueCatalog=frame.languages;
+    const optionsChanged=frame.automation_options && JSON.stringify(frame.automation_options)!==JSON.stringify(automationOptions);
+    if (frame.automation_options) automationOptions=frame.automation_options;
     const next=frame.state;
     serverStatus=frame.status;
     practiceAvailable=frame.practice_available;
@@ -1029,6 +1124,7 @@ async function refreshConsole() {
     const snapshot = JSON.stringify(next);
     // Preserve button focus and click targets while polling unchanged state.
     if (snapshot !== lastSnapshot) {state = next; lastSnapshot = snapshot; renderTasks(); renderAbilities(); renderClocks(); renderAutomation(); renderEvents(); if (!$("capability").hidden) page(location.hash.slice(1));}
+    else if (optionsChanged) renderAutomation();
     renderManagement(); updateCountdowns();
     if (hash === location.hash && lastActivityPage !== hash) {lastActivityPage=hash;loadViewData();}
     if (!$("alarms").hidden) initializeAlarmTime();
@@ -1111,14 +1207,15 @@ $('new-task').addEventListener('click', () => openTask());
 $('new-schedule').addEventListener('click', event => handle(() => openRule(),event.currentTarget));
 function exportWorkflow(rule) {
   const trigger=rule.trigger||'schedule';
-  const workflow={name:rule.name,trigger,condition:rule.condition||'',after:rule.after||'',before:rule.before||'',actions:rule.actions};
+  const workflow={name:rule.name,trigger,state_conditions:rule.state_conditions||[],after:rule.after||'',before:rule.before||'',actions:rule.actions};
   if(trigger==='schedule') Object.assign(workflow,{
     local_time:localTimeValue(new Date(rule.schedule.next_at),rule.schedule.timezone),repeat:rule.schedule.repeat
   });
-  if(trigger==='entity') Object.assign(workflow,{entity_tool:rule.entity_tool,to_state:rule.to_state});
-  const used=new Set([rule.entity_tool,...rule.actions.filter(step=>step.action==='http_tool').map(step=>step.value)]);
-  const tools=Object.fromEntries((networkConfig?.tools||[]).filter(tool=>used.has(tool.id)).map(tool=>[tool.id,tool.name]));
-  const blob=new Blob([JSON.stringify({format:'xiyue-automation',version:1,workflow,tools},null,2)+'\n'],{type:'application/json'});
+  if(trigger==='state') Object.assign(workflow,{state_source:rule.state_source,to_state:rule.to_state});
+  const used=new Set([rule.state_source,...workflow.state_conditions.map(condition=>condition.source),...rule.actions.filter(step=>step.action==='tool').map(step=>step.value)]);
+  const options=[...automationOptions.tools,...Object.values(automationOptions.states)];
+  const tools=Object.fromEntries(options.filter(item=>used.has(item.id)).map(item=>[item.id,item.name]));
+  const blob=new Blob([JSON.stringify({format:'xiyue-automation',version:2,workflow,tools},null,2)+'\n'],{type:'application/json'});
   const link=el('a');
   link.href=URL.createObjectURL(blob);
   link.download='喜悦流程-'+rule.name.replace(/[\\/:*?"<>|]/g,'-')+'.json';
@@ -1134,12 +1231,14 @@ $('ability-file').addEventListener('change', () => handle(async () => {
     const data = JSON.parse(await file.text());
     let draft;
     if (data?.format==='xiyue-automation') {
-      if (data.version!==1) throw new Error('此流程文件的版本暂不支持');
-      draft=data.workflow;
+      if (![1,2].includes(data.version)) throw new Error('此流程文件的版本暂不支持');
+      draft=data.version===1?await api('/api/automation/normalize','POST',data.workflow):data.workflow;
     } else if (Array.isArray(data?.steps)) {
       draft=await api('/api/automation/convert-legacy','POST',data);
     }
-    if (!draft || typeof draft.name!=='string' || !['manual','schedule','entity'].includes(draft.trigger) ||
+    if (!draft || typeof draft.name!=='string' || !['manual','schedule','state'].includes(draft.trigger) ||
+      (draft.state_conditions !== undefined && (!Array.isArray(draft.state_conditions) || draft.state_conditions.length>8 ||
+        draft.state_conditions.some(condition=>!condition || typeof condition.source!=='string' || typeof condition.equals!=='string'))) ||
       !Array.isArray(draft.actions) || draft.actions.length<1 || draft.actions.length>64 ||
       draft.actions.some(step=>!step || !Object.hasOwn(ruleActions,step.action)))
       throw new Error('文件不符合喜悦流程格式');
@@ -1180,26 +1279,6 @@ window.addEventListener('beforeunload',event=>{
 
 const serviceNames = {asr:'语音识别 ASR',llm:'大模型 LLM',tts:'语音合成 TTS',external:'外部 Agent'};
 function formatDuration(seconds) {return seconds < 60 ? `${seconds} 秒` : `${Math.floor(seconds/60)} 分 ${seconds%60} 秒`;}
-function setupStep(config) {
-  const llmReady = config.llm.endpoint && config.llm.model;
-  const externalReady = config.external.endpoint;
-  const modeReady = config.mode === 'external' ? externalReady :
-    llmReady && (config.mode !== 'hybrid' || externalReady);
-  if (serverStatus?.voice?.available) {
-    if (config.device_setup_complete) return null;
-    const asrReady = config.asr.provider === 'doubao'
-      ? config.asr.key_configured && !config.asr.endpoint
-      : config.asr.provider === 'sensevoice' && config.asr.endpoint;
-    if (!asrReady) return 'configure_asr';
-    if (['doubao','deepseek'].includes(config.tts.provider) && (!serverStatus.voice.cloud_tts_available || !config.tts.key_configured || !config.tts.model)) return 'configure_tts';
-    if (modeReady) return 'verify_device';
-    return 'configure';
-  }
-  if (config.setup_complete) return null;
-  if (modeReady && (config.mode === 'external' || (config.updated_at &&
-      (config.llm.key_configured || config.llm.provider.startsWith('custom'))))) return 'verify';
-  return 'configure';
-}
 function renderManagement() {
   const config = state.settings; if (!config) return;
   const device = serverStatus.device;
@@ -1237,19 +1316,20 @@ function renderManagement() {
       ? '最近一轮：' + (stage[last.stage] || '已结束') + ' · ' + (last.capture_ms ? '收音 ' + last.capture_ms + ' ms · ' : '') + '识别 ' + last.asr_ms + ' ms · 模型 ' + last.model_ms + ' ms · 播报 ' + last.playback_ms + ' ms'
       : '本次启动后暂无当前配置的语音记录。';
   }
-  const step = setupStep(config);
+  const step = serverStatus.setup_stage;
   $('first-setup').hidden = !step;
   const service = config.mode === 'external' ? '外部助手' : '大模型';
   const instructions = {
     verify: '已保存配置。点击验证，确认' + service + '能正常回复。',
     verify_device: '对音箱喊「' + config.wake_word + '」并说一句话。成功播报后引导会收起。',
-    configure_asr: '选择豆包语音或自建 SenseVoice，再用音箱完成首次语音验证。',
+    configure_asr: '配置语音识别服务，再用音箱完成首次语音验证。',
     configure_tts: '补全语音合成配置，或选用音箱系统语音。',
+    configure_external: '填写外部 Agent 的连接地址并保存。',
     configure: '选择大模型厂商，填写模型 ID 和 API Key，然后保存。'
   };
   $('setup-next').textContent = instructions[step] || '';
   $('setup-action').hidden = step === 'verify_device';
-  $('setup-action').textContent = {verify:'验证服务',configure_asr:'配置语音识别',configure_tts:'配置语音合成',configure:'配置大模型'}[step] || '';
+  $('setup-action').textContent = {verify:'验证服务',configure_asr:'配置语音识别',configure_tts:'配置语音合成',configure_external:'配置外部 Agent',configure:'配置大模型'}[step] || '';
   if (providerOptions && dialogueCatalog && !settingsSaving && settingsDirty.size===0 && settingsRevision!==config.revision) fillSettings(config);
 }
 function inputLabel(title,input) {const label=el('label',title);label.append(input);return label;}
@@ -1566,10 +1646,11 @@ function updateModeActions() {
 }
 $('setting-mode').addEventListener('change', updateModeActions);
 $('setup-action').addEventListener('click', () => {
-  const step = setupStep(state.settings);
+  const step = serverStatus?.setup_stage;
   const voice = step === 'configure_asr' || step === 'configure_tts';
   location.hash = voice ? 'settings/voice' : 'settings/model';
   if (voice) setTimeout(() => $(step === 'configure_asr'?'asr-provider':'tts-provider').focus(), 0);
+  if (step==='configure_external') setTimeout(() => $('external-endpoint')?.focus(),0);
 });
 function serviceFormValues(name) {
   if (name === 'asr') {
@@ -2156,7 +2237,7 @@ $('dialogue-clear').addEventListener('click',()=>handle(async()=>{
 },$('dialogue-clear')));
 function loadViewData() {
   if (consoleView==='usage') loadUsage();
-  if (!networkConfig && (consoleView==='abilities' || consoleView==='automation' || location.hash==='#settings/search')) handle(loadNetworkConfig);
+  if (!networkConfig && (consoleView==='abilities' || location.hash==='#settings/search')) handle(loadNetworkConfig);
   if (consoleView==='dialogues' || location.hash==='#settings/privacy') handle(loadDialogues);
 }
 

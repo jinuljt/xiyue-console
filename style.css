@@ -338,3 +338,6 @@ dialog.drawer .field-grid { grid-template-columns: 1fr; }
 .detail-list { display: grid; grid-template-columns: minmax(76px,auto) minmax(0,1fr); gap: 10px 12px; margin: 14px 0; }
 .detail-list dt { color: var(--muted); }
 .detail-list dd { margin: 0; overflow-wrap: anywhere; }
+
+.rule-state-condition { margin-block-end: 12px; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius); }
+.rule-state-condition > button { margin-block-start: 8px; }
