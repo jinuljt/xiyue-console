@@ -114,6 +114,9 @@ small { font-size: 12px; }
 .capability-table th:nth-child(2), .capability-table td:nth-child(2) { width: 108px; }
 .capability-table th:last-child, .capability-table td:last-child { width: 146px; }
 .capability-table th:last-child { padding-left: 18px; }
+.ability-center-table :is(th,td):nth-child(3) { width: 124px; }
+.ability-center-table td:nth-child(3) { color: var(--muted); }
+
 .capability-info p { font-size: 12px; margin-top: 2px; overflow-wrap: anywhere; }
 .capability-runtime { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding: 10px 12px; background: var(--pale); border-radius: var(--radius); margin: 10px 0 12px; }
 .capability-runtime small:empty { display: none; }
@@ -288,6 +291,7 @@ dialog.drawer .field-grid { grid-template-columns: 1fr; }
   .settings-tabs { padding-inline: 10px; gap: 0 13px; }
   .settings-surface [data-settings-scope] { padding-inline: 10px; }
   .capability-table th:nth-child(2), .capability-table td:nth-child(2) { width: 74px; }
+  .ability-center-table :is(th,td):nth-child(3) { min-width: 78px; width: 78px; }
   .capability-table th:last-child, .capability-table td:last-child { width: 84px; }
   .desktop-table :is(th,td), .usage-history :is(th,td) { padding: 7px 8px; }
   .capability-table th:last-child { padding-left: 14px; }

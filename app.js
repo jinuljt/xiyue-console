@@ -151,23 +151,39 @@ function capabilityRow(name, description, status, actions) {
 function renderCapabilityTable(id, rows, emptyText) {
   tableContent(id,['名称','状态','操作'],rows,emptyText,'capability-table');
 }
-function savedAbilityRow(a) {
+function setCapabilityStatus(badge, enabled) {
+  badge.textContent = enabled === undefined ? '—' : enabled ? '已启用' : '未启用';
+  badge.className = enabled === undefined ? '' : enabled ? 'badge' : 'badge paused';
+}
+function capabilityStatus(enabled) {
+  const badge = el('span');
+  setCapabilityStatus(badge, enabled);
+  return badge;
+}
+function centerCapabilityRow(name, description, status, actions, runtime = null) {
+  const [info, badge, controls] = capabilityRow(name, description, status, actions);
+  return [info, badge, runtime, controls];
+}
+function savedAbilityRow(a, inCenter = false) {
   const m = a.manifest;
-  const status = el('span', a.enabled ? '已启用' : '未启用', a.enabled ? 'badge' : 'badge paused');
+  const status = capabilityStatus(a.enabled);
   const description = m.id === 'quick-timer' ? '设置倒计时，到点响铃。' : m.description;
   const detail = button('详情', () => openConfig(m.id), 'secondary');
   detail.setAttribute('aria-label', `查看${m.name}详情`);
-  return capabilityRow(m.name, description, status, [detail]);
+  const row = inCenter ? centerCapabilityRow : capabilityRow;
+  return row(m.name, description, status, [detail]);
 }
 function renderAbilities() {
   const abilities = Object.values(state.abilities).sort((a,b) => a.manifest.id.localeCompare(b.manifest.id));
   const custom = abilities.filter(a => a.manifest.menu && !builtinAbilityIDs.has(a.manifest.id));
   const flows = abilities.filter(a => !a.manifest.menu && !builtinAbilityIDs.has(a.manifest.id));
-  const roomBadge = el('span', '', 'badge');
-  roomBadge.id = 'room-audio-badge';
+  const roomBadge = capabilityStatus();
+  roomBadge.id = 'room-audio-enabled';
+  const roomRuntime = el('span');
+  roomRuntime.id = 'room-audio-runtime';
   const detail = button('配置与控制', openRoomAudio, 'secondary');
   detail.setAttribute('aria-label', '远程听音配置与控制');
-  const roomRow = capabilityRow('远程听音', '在音箱播放局域网收音设备的实时声音。', roomBadge, [detail]);
+  const roomRow = centerCapabilityRow('远程听音', '在音箱播放局域网收音设备的实时声音。', roomBadge, [detail], roomRuntime);
   const clockRows = Object.entries(clockCapabilities).map(([id,[name,description]]) => {
     const enabled = state.features?.[id] !== false;
     const toggle = button(enabled ? '停用' : '启用',async () => {
@@ -175,26 +191,21 @@ function renderAbilities() {
       await refresh();
     },'secondary');
     const actions = enabled ? [button('管理',() => {location.hash=id;},'secondary'),toggle] : [toggle];
-    return capabilityRow(name,description,el('span',enabled?'已启用':'未启用',enabled?'badge':'badge paused'),actions);
+    return centerCapabilityRow(name,description,capabilityStatus(enabled),actions);
   });
-  const practice = state.settings?.practice_enabled;
-  const practiceStatus = practice ? (practiceAvailable ? '已启用' : '待配置') : '未启用';
-  const practiceRow = capabilityRow('外语陪练', '用选定语言练习口语和情景对话。', el('span', practiceStatus,practiceStatus==='已启用'?'badge':practiceStatus==='待配置'?'badge waiting':'badge paused'),
-    [button('配置', openPractice, 'secondary')]);
-  const haConnected = networkConfig?.home_assistant && networkConfig?.ha_key;
-  const haRow = capabilityRow('Home Assistant', '读取已选择的设备状态，将灯和开关接入自动化。',
-    el('span', !networkConfig ? '读取中' : haConnected ? '已配置' : '未连接',haConnected?'badge info':'badge paused'),
-    [button('配置', () => openHA(), 'secondary')]);
+  const practice = Boolean(state.settings?.practice_enabled);
+  const practiceRow = centerCapabilityRow('外语陪练', '用选定语言练习口语和情景对话。', capabilityStatus(practice),
+    [button('配置', openPractice, 'secondary')], practice && !practiceAvailable ? '语音配置不足' : null);
+  const haEnabled = networkConfig ? Boolean(networkConfig.home_assistant && networkConfig.ha_key) : undefined;
+  const haRow = centerCapabilityRow('Home Assistant', '读取已选择的设备状态，将灯和开关接入自动化。',
+    capabilityStatus(haEnabled), [button('配置', () => openHA(), 'secondary')]);
   const tools = (networkConfig?.tools || []).filter(tool=>tool.kind==='http').map(tool=>
-    capabilityRow(tool.name,tool.description,el('span',toolChannels(tool),'badge info'),
+    centerCapabilityRow(tool.name,tool.description+' · '+toolChannels(tool),capabilityStatus(true),
       [button('配置',()=>openHTTP(tool),'secondary'),button('移除',()=>removeNetworkTool(tool),'secondary')]));
-  const example = capabilityRow('HTTP 测试工具', '发出示例 GET 请求并查看返回结果。',
-    el('span','手动试运行','badge info'), [button('打开', () => {
-      $('http-example-result').hidden = true;
-      $('http-example-dialog').showModal();
-    }, 'secondary')]);
-  renderCapabilityTable('ability-list',[roomRow,...clockRows,practiceRow,haRow,...custom.map(savedAbilityRow),example,...tools],'暂无能力。');
-  renderCapabilityTable('flow-list',flows.filter(a=>a.manifest.id!=='guided-flow').map(savedAbilityRow),'还没有手动流程。');
+  tableContent('ability-list',['名称','启用状态','运行情况','操作'],
+    [roomRow,...clockRows,practiceRow,haRow,...custom.map(a=>savedAbilityRow(a,true)),...tools],
+    '暂无能力。','capability-table ability-center-table');
+  renderCapabilityTable('flow-list',flows.filter(a=>a.manifest.id!=='guided-flow').map(a=>savedAbilityRow(a)),'还没有手动流程。');
   renderCapabilityMenus(custom);
   renderRoomAudioBadge();
 }
@@ -238,14 +249,15 @@ function renderCustomCapability(ability) {
   renderFlowRuns('custom-capability-runs',state.tasks.filter(task=>task.ability_id===id));
 }
 function renderRoomAudioBadge(unavailable = false) {
-  const badge = $('room-audio-badge');
+  const badge = $('room-audio-enabled');
   if (badge) {
     const stages = {stopped:'已停止', connecting:'连接中', connected:'等待音频', playing:'听音中',
       reconnecting:'重连中', paused:'暂时让行', stopping:'停止中'};
-    const label = unavailable ? '状态暂不可用' : !roomAudio ? '读取中' : !roomAudio.available ? '不可用'
-      : !roomAudio.config.source && !roomAudio.status.running ? '待配置' : stages[roomAudio.status.stage] || '状态暂不可用';
-    badge.textContent = label;
-    badge.classList.toggle('paused', unavailable || !roomAudio?.status.running);
+    setCapabilityStatus(badge, roomAudio?.listening);
+    const runtime = $('room-audio-runtime');
+    const label = unavailable ? '暂时无法读取' : !roomAudio ? '—' :
+      !roomAudio.available ? '播放不可用' : roomAudio.config.source ? stages[roomAudio.status.stage] : '—';
+    runtime.textContent = label || '—';
   }
   $('stat-abilities').textContent = Object.values(state.abilities)
     .filter(a => a.manifest.menu && a.enabled).length +
@@ -2195,14 +2207,6 @@ async function openHTTP(tool) {
   $('http-dialog').showModal();
 }
 $('http-open').onclick = event => handle(() => openHTTP(),event.currentTarget);
-$('http-example-test').onclick = event => networkAction($('http-example-result'),event.currentTarget, async () => {
-  return JSON.stringify(await api(networkRoot+'/example'),null,2);
-});
-$('http-example-copy').onclick = event => handle(async ()=>{
-  await openHTTP({method:'GET',extract:'message'});
-  $('http-example-dialog').close();
-},event.currentTarget);
-
 function httpPayload() {
   const form = httpForm.elements;
   const payload = {kind: 'http', voice:form.voice.checked, automation:form.automation.checked, clear_key:form.clear_key.checked};

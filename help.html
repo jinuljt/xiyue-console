@@ -157,7 +157,7 @@
       <h3>Home Assistant</h3>
       <p>在 Home Assistant 的个人资料页创建长期访问令牌。在「能力中心 → Home Assistant」填写服务根地址和令牌。保存连接后，选择一个实体和要开放的操作。读状态可开放给语音，灯和开关的开关动作可添加到自动化。</p>
       <h3>自定义 HTTP 工具</h3>
-      <p>在「能力中心」打开预置的「HTTP 测试工具」，点「试运行」查看音箱的示例响应。要接入自己的 API，点「以此为模板添加工具」，或直接点「添加工具」打开通用表单。</p>
+      <p>「HTTP 测试工具」是一条预置的自定义工具。点「配置」查看示例地址、GET 方法和返回字段 <code>args.message</code>。点「试运行」会向 Postman Echo 发送固定参数并显示 <code>hello</code>。你可以修改或移除这条工具。<a href="https://learning.postman.com/docs/reference/developer-resources/echo-api">Postman Echo 接口说明</a></p>
       <p>填写固定地址、用途、GET 或 POST，以及接口需要的参数。GET 参数会附到 URL 的查询字符串，POST 参数会作为 JSON 对象发送。可以给每个参数选择文本、数字或布尔值。试运行时填写示例，可直接查看返回；如只想读取某一项，填写类似 data.aqi 的 JSON 路径。</p>
       <p>保存后，勾选允许语音调用的 GET 工具可在对话中使用。勾选开放给自动化后，可在规则中添加「调用连接工具」并填写该规则的参数值。语音调用时，所选的工具返回内容会传给已配置的对话模型整理。</p>
     </section>
