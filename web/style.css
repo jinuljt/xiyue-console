@@ -204,6 +204,8 @@ dialog.drawer > form:only-child > :is(.actions, .drawer-footer) { margin-top: au
 dialog.drawer .field-grid { grid-template-columns: 1fr; }
 #dialogue-detail { overflow-wrap: anywhere; }
 #room-audio-dialog ol { padding-left: 20px; }
+.room-audio-level { display: grid; grid-template-columns: auto minmax(4rem, 1fr) 7rem; gap: .75rem; align-items: center; margin: 1rem 0; }
+.room-audio-level meter { width: 100%; }
 #ha-tool-list:not(:empty) { margin-block: 12px; }
 #ha-tool-list .capability-table th:nth-child(2), #ha-tool-list .capability-table td:nth-child(2) { width: auto; }
 #ha-tool-list .capability-table th:last-child, #ha-tool-list .capability-table td:last-child { width: auto; }

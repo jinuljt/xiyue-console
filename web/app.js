@@ -18,6 +18,7 @@ let roomAudio;
 let roomAudioDirty = false;
 let roomAudioPending = false;
 let roomAudioRead = 0;
+let roomAudioRefreshing = false;
 let lastActivityPage;
 const titles = {
   home: ['系统总览', '配置服务、管理能力，了解喜悦的运行情况。'],
@@ -270,7 +271,8 @@ async function openRoomAudio() {
 }
 function roomAudioDraft() {
   return {name: $('room-audio-name').value.trim(), source: $('room-audio-source').value.trim(),
-    volume: $('room-audio-volume').valueAsNumber, username: $('room-audio-username').value.trim(),
+    volume: $('room-audio-volume').valueAsNumber, auto_gain: $('room-audio-auto-gain').checked,
+    username: $('room-audio-username').value.trim(),
     password: $('room-audio-password').value};
 }
 function renderRoomAudio() {
@@ -281,10 +283,11 @@ function renderRoomAudio() {
     $('room-audio-name').value = config.name || '';
     $('room-audio-source').value = config.source;
     $('room-audio-volume').value = config.volume;
+    $('room-audio-auto-gain').checked = Boolean(config.auto_gain);
     $('room-audio-username').value = config.username || '';
     $('room-audio-password').value = '';
   }
-  for (const field of ['name','source','volume','username','password']) $('room-audio-'+field).disabled = status.running || roomAudioPending;
+  for (const field of ['name','source','volume','auto-gain','username','password']) $('room-audio-'+field).disabled = status.running || roomAudioPending;
   const draft = roomAudioDraft();
   const savedPassword = roomAudio.password_configured && draft.source === config.source && draft.username === config.username;
   $('room-audio-password').placeholder = savedPassword ? '已保存，留空沿用' : '';
@@ -305,6 +308,20 @@ function renderRoomAudio() {
   if ($('room-audio-status').textContent !== label) $('room-audio-status').textContent = label;
   $('room-audio-last').textContent = status.last_audio_at
     ? '最近收到音频数据 ' + new Date(status.last_audio_at).toLocaleTimeString('zh-CN', {timeZone: state.settings?.timezone}) : '';
+  renderRoomAudioLevel(status.input_dbfs);
+}
+function renderRoomAudioLevel(level) {
+  $('room-audio-meter').value = Number.isFinite(level) ? level : -90;
+  $('room-audio-level').textContent = !Number.isFinite(level) ? '等待读数' :
+    level <= -90 ? '低于 −90 dBFS' : `${level} dBFS`;
+}
+async function refreshRoomAudioMeter() {
+  if (document.hidden || !$('room-audio-dialog').open || roomAudioPending || roomAudioRefreshing ||
+      !roomAudio?.status.running) return;
+  roomAudioRefreshing = true;
+  try {await loadRoomAudio();}
+  catch {renderRoomAudioLevel();}
+  finally {roomAudioRefreshing = false;}
 }
 async function loadRoomAudio() {
   const read = ++roomAudioRead;
@@ -1130,7 +1147,8 @@ async function refreshConsole() {
     renderManagement(); updateCountdowns();
     if (hash === location.hash && lastActivityPage !== hash) {lastActivityPage=hash;loadViewData();}
     if (!$("alarms").hidden) initializeAlarmTime();
-    if (consoleView==='abilities' && !roomAudioPending) {
+    if (consoleView==='abilities' && !roomAudioPending &&
+        !($('room-audio-dialog').open && roomAudio?.status.running)) {
       loadRoomAudio().catch(()=>{
         renderRoomAudioBadge(true);
         $('room-audio-status').textContent = '暂时无法获取听音状态';
@@ -2103,6 +2121,7 @@ function refreshLiveView() {
 }
 page(location.hash.slice(1));refresh();
 setInterval(refreshLiveView,5000);
+setInterval(refreshRoomAudioMeter,1000);
 document.addEventListener('visibilitychange',refreshLiveView);
 setInterval(updateCountdowns,1000);
 

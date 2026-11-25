@@ -363,12 +363,19 @@
         <div><p id="room-audio-status" role="status">正在读取状态</p><small id="room-audio-last" class="muted"></small></div>
         <button id="room-audio-play" type="button" class="primary" disabled>开始听音</button>
       </div>
+      <div class="room-audio-level">
+        <label for="room-audio-meter">输入电平</label>
+        <meter id="room-audio-meter" min="-90" max="0" value="-90"></meter>
+        <small id="room-audio-level" class="muted">等待读数</small>
+      </div>
       <form id="room-audio-form">
         <div class="field-grid room-audio-fields">
           <label class="room-audio-source">IP Webcam 收音地址<input id="room-audio-source" type="url" maxlength="500" autocomplete="off" placeholder="http://手机IP:端口/audio.wav"></label>
           <label>收音名称（可选）<input id="room-audio-name" type="text" maxlength="60" placeholder="例如卧室"></label>
           <label>播放音量 (%)<input id="room-audio-volume" type="number" min="0" max="100" step="1" value="70" required></label>
         </div>
+        <label class="check-label"><input id="room-audio-auto-gain" type="checkbox">自动增益</label>
+        <small class="muted">抬高较轻的声音并限制峰值，可能同时放大底噪。</small>
         <details id="room-audio-login">
           <summary>IP Webcam 用户名和密码（可选）</summary>
           <label>用户名<input id="room-audio-username" type="text" maxlength="128" autocomplete="off"></label>
