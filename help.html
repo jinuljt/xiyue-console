@@ -37,6 +37,7 @@
       </details>
       <a href="#tts">语音合成</a>
       <a href="#dialogue-languages">对话语言与外语陪练</a>
+      <a href="#capability-access">外部访问</a>
       <a href="#network-tools">网页搜索与连接工具</a>
       <a href="#automation">编排自动化</a>
       <a href="#external">连接已有助手</a>
@@ -149,6 +150,12 @@
       </ol>
       <p>说「陪我练口语，模拟点咖啡」即可进入陪练。说「退出陪练」可回到日常对话。</p>
       <p><a href="#asr-doubao">配置豆包实时识别</a> · <a href="#asr-sensevoice">部署与配置 SenseVoice</a></p>
+    </section>
+    <section id="capability-access" hidden>
+      <h2>外部访问</h2>
+      <p>在「系统配置 → 外部访问」为每个客户端选择所需权限。使用音箱的 HTTPS 地址，MCP 客户端连接 <code>/mcp</code>。客户端需支持在请求中设置 <code>Authorization: Bearer</code>，并信任音箱证书。</p>
+      <p>普通程序可用 <code>GET /api/v1/capabilities</code> 读取获准操作，以 <code>POST /api/v1/capabilities/{操作ID}/invoke</code> 调用，JSON 请求体包含 <code>arguments</code>。创建倒计时或启动流程时，在参数中提供 <code>idempotency_key</code>，重试使用同一个键。异步流程返回操作 ID，另有权限的客户端可通过 <code>GET /api/v1/operations/{id}</code> 查询。</p>
+      <p>外部启动流程需要单独选择流程。包含子流程、外部设备控制、自定义 HTTP 等动作的流程暂不开放外部启动。被授权流程修改后需要重新授权。</p>
     </section>
     <section id="network-tools" hidden>
       <h2>网页搜索与连接工具</h2>

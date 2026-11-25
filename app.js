@@ -7,7 +7,7 @@ let lastSnapshot = '';
 let providerOptions = null;
 const settingsDirty = new Set();
 const settingsEditCount = {};
-const settingsScopes = ['device','voice','model','search','privacy'];
+const settingsScopes = ['device','voice','model','search','access','privacy'];
 let settingsSaving = false;
 let settingsRevision = 0;
 let savedSettings;
@@ -71,6 +71,7 @@ function page(name) {
   $('page-title').textContent = title[0]; $('page-subtitle').textContent = title[1];
   if (target === 'alarms' && state.settings) initializeAlarmTime();
   if (target === 'capability') renderCustomCapability(custom);
+  if (target !== 'system' || settingsTab !== 'access') hideCapabilityToken();
   if (target === 'system') {
     for (const panel of document.querySelectorAll('[data-settings-scope]')) panel.hidden = panel.dataset.settingsScope !== settingsTab;
     for (const link of document.querySelectorAll('[data-settings-tab]')) {
@@ -1085,6 +1086,7 @@ async function refreshConsole() {
     document.querySelector('body > main').hidden = !paired;
     document.querySelector('body > aside').hidden = !paired;
     if (!paired) {
+      hideCapabilityToken();
       serverStatus=null;
       lastActivityPage=undefined;
       lastSnapshot='';
@@ -2391,7 +2393,69 @@ function loadViewData() {
   if (consoleView==='usage') loadUsage();
   if (!networkConfig && (consoleView==='abilities' || location.hash==='#settings/search')) handle(loadNetworkConfig);
   if (consoleView==='dialogues' || location.hash==='#settings/privacy') handle(loadDialogues);
+  if (location.hash==='#settings/access') handle(loadCapabilityAccess);
 }
+
+function hideCapabilityToken() {
+  $('capability-token-panel').hidden=true;
+  $('capability-token').value='';
+}
+$('capability-token-dismiss').onclick=hideCapabilityToken;
+$('capability-token-copy').onclick=event=>handle(async()=>{
+  await navigator.clipboard.writeText($('capability-token').value);
+  toast('已复制令牌');
+},event.currentTarget);
+
+const grantForm=$('capability-grant-form');
+function updateCapabilityGrantScope() {
+  const allowWorkflow=Boolean(grantForm.querySelector('[name="operations"][value="automation.run"]:checked'));
+  $('capability-workflow-section').hidden=!allowWorkflow;
+}
+grantForm.addEventListener('change',updateCapabilityGrantScope);
+function capabilityCheckbox(name,value,label) {
+  const input=el('input');
+  input.type='checkbox';input.name=name;input.value=value;
+  const row=el('label',undefined,'check-label');
+  row.append(input,document.createTextNode(label));
+  return row;
+}
+async function loadCapabilityAccess() {
+  const data=await api('/api/capability-grants');
+  if (location.hash!=='#settings/access') return;
+  $('capability-access-note').textContent=data.available?'':'通过音箱的 HTTPS 控制台登录后，即可管理外部授权。';
+  grantForm.hidden=!data.available;
+  const names=new Map(data.operations.map(op=>[op.id,op.description]));
+  const rows=data.grants.map(grant=>[
+    grant.name,grant.operations.map(id=>names.get(id)||id).join('、'),when(grant.expires_at),
+    [button('撤销',async()=>{
+      if(!window.confirm('撤销此客户端的外部授权？'))return;
+      await api('/api/capability-grants/'+encodeURIComponent(grant.id),'DELETE');
+      await loadCapabilityAccess();
+    },'secondary')]
+  ]);
+  tableContent('capability-grants',['客户端','权限','有效期','操作'],rows,'暂无外部授权。');
+  $('capability-permissions').replaceChildren(...data.operations.map(op=>
+    capabilityCheckbox('operations',op.id,(op.writes?'执行 · ':'读取 · ')+op.description)));
+  $('capability-workflows').replaceChildren(...data.workflows.map(workflow=>
+    capabilityCheckbox('workflow_ids',workflow.id,workflow.name)));
+  if(!data.workflows.length) $('capability-workflows').append(el('p','目前没有可授权的流程。','muted'));
+  updateCapabilityGrantScope();
+}
+grantForm.addEventListener('submit',event=>{
+  event.preventDefault();
+  handle(async()=>{
+    const data=new FormData(grantForm);
+    const result=await api('/api/capability-grants','POST',{
+      name:data.get('name'),operations:data.getAll('operations'),
+      workflow_ids:$('capability-workflow-section').hidden?[]:data.getAll('workflow_ids')
+    });
+    if(location.hash!=='#settings/access')return;
+    $('capability-token').value=result.token;
+    $('capability-token-panel').hidden=false;
+    grantForm.reset();
+    await loadCapabilityAccess();
+  },event.submitter);
+});
 
 const networkRoot = '/api/network-tools';
 let networkConfig;

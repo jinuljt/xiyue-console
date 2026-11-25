@@ -161,6 +161,7 @@
       <a data-settings-tab="voice" href="#settings/voice">语音与语言</a>
       <a data-settings-tab="model" href="#settings/model">模型与助手</a>
       <a data-settings-tab="search" href="#settings/search">网页搜索</a>
+      <a data-settings-tab="access" href="#settings/access">外部访问</a>
       <a data-settings-tab="privacy" href="#settings/privacy">账号与隐私</a>
     </nav>
     <form data-settings-scope="device" id="settings-device-form" hidden>
@@ -258,6 +259,26 @@
       <div class="service-actions"><a href="/help.html#network-tools">查看配置指南</a><button id="search-test" type="button" class="secondary">验证</button><button class="primary" type="submit">保存搜索配置</button></div>
       <p id="search-result" role="status"></p>
     </form>
+    <div data-settings-scope="access" hidden>
+      <section class="settings-panel">
+        <div class="panel-heading"><h2>外部访问</h2><p>为外部客户端授予指定的音箱能力。授权有效期 30 天，可随时撤销。</p></div>
+        <div id="capability-grants"></div>
+        <p id="capability-access-note" class="muted" role="status"></p>
+      </section>
+      <form id="capability-grant-form" class="settings-panel" hidden>
+        <h2>新增客户端授权</h2>
+        <label>客户端名称<input name="name" required maxlength="100"></label>
+        <fieldset><legend>允许调用的能力</legend><div id="capability-permissions" class="field-grid"></div></fieldset>
+        <fieldset id="capability-workflow-section" hidden><legend>允许启动的流程</legend><div id="capability-workflows"></div></fieldset>
+        <div class="service-actions"><button class="primary" type="submit">创建授权</button><a href="/help.html#capability-access">查看接入指南</a></div>
+      </form>
+      <section id="capability-token-panel" class="settings-panel" hidden>
+        <h2>客户端凭证</h2>
+        <p>凭证只显示这一次。请保存到客户端的安全存储。</p>
+        <label>访问令牌<input id="capability-token" type="password" readonly autocomplete="off"></label>
+        <div class="service-actions"><button id="capability-token-copy" type="button" class="secondary">复制令牌</button><button id="capability-token-dismiss" type="button" class="secondary">关闭</button></div>
+      </section>
+    </div>
     <div data-settings-scope="privacy" hidden>
     <section id="owner-management" class="settings-panel" hidden>
       <h2>管理员账号</h2>
