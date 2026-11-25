@@ -272,6 +272,7 @@ async function openRoomAudio() {
 function roomAudioDraft() {
   return {name: $('room-audio-name').value.trim(), source: $('room-audio-source').value.trim(),
     volume: $('room-audio-volume').valueAsNumber, auto_gain: $('room-audio-auto-gain').checked,
+    voice_enhancement: $('room-audio-voice-enhancement').checked,
     username: $('room-audio-username').value.trim(),
     password: $('room-audio-password').value};
 }
@@ -284,11 +285,13 @@ function renderRoomAudio() {
     $('room-audio-source').value = config.source;
     $('room-audio-volume').value = config.volume;
     $('room-audio-auto-gain').checked = Boolean(config.auto_gain);
+    $('room-audio-voice-enhancement').checked = config.voice_enhancement !== false;
     $('room-audio-username').value = config.username || '';
     $('room-audio-password').value = '';
   }
-  for (const field of ['name','source','volume','auto-gain','username','password']) $('room-audio-'+field).disabled = status.running || roomAudioPending;
+  for (const field of ['name','source','volume','voice-enhancement','auto-gain','username','password']) $('room-audio-'+field).disabled = status.running || roomAudioPending;
   const draft = roomAudioDraft();
+  $('room-audio-gain-option').hidden = draft.voice_enhancement;
   const savedPassword = roomAudio.password_configured && draft.source === config.source && draft.username === config.username;
   $('room-audio-password').placeholder = savedPassword ? '已保存，留空沿用' : '';
   $('room-audio-auth-note').textContent = savedPassword
